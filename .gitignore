@@ -140,3 +140,8 @@ dmypy.json
 .vscode/
 
 .idea
+
+*.pth
+
+demo_output.jpg
+idea.jpg
