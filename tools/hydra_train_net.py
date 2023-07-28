@@ -34,8 +34,9 @@ $ tree -L 2 ./outputs/
 Contact ZHU Lei (ray.leizhu@outlook.com) for inquries about this script
 """
 
-import sys 
+import sys
 import os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 # print(sys.path)
 
@@ -71,12 +72,14 @@ def _find_free_port():
     # NOTE: there is still a chance the port could be taken by other processes.
     return port
 
+
 def get_shared_folder(share_root) -> Path:
     if Path(share_root).parent.is_dir():
         p = Path(f"{share_root}")
         p.mkdir(exist_ok=True)
         return p
     raise RuntimeError(f"The parent of share_root ({share_root}) must exist!")
+
 
 def get_init_file(share_root):
     # Init file must not exist, but it's parent dir must exist.
@@ -85,6 +88,7 @@ def get_init_file(share_root):
     if init_file.exists():
         os.remove(str(init_file))
     return init_file
+
 
 def get_dist_url(ddp_comm_mode='tcp', share_root=None):
     if ddp_comm_mode == 'file':
@@ -95,6 +99,7 @@ def get_dist_url(ddp_comm_mode='tcp', share_root=None):
     else:
         raise ValueError('Unknown DDP communication mode')
 
+
 class Trainer(object):
     def __init__(self, args):
         self.args = args
@@ -103,11 +108,11 @@ class Trainer(object):
         self._setup_gpu_args()
         if self.args.world_size > 1:
             slurm_init_distributed_mode(self.args)
-        if not self.args.eval_only: # always auto resume if in training
-            self.args.resume = True 
+        if not self.args.eval_only:  # always auto resume if in training
+            self.args.resume = True
         main(self.args)
 
-    def checkpoint(self): # being called when met timeout or preemption signal is received
+    def checkpoint(self):  # being called when met timeout or preemption signal is received
         import os
         import submitit
 
@@ -132,14 +137,14 @@ class Trainer(object):
         self.args.world_size = job_env.num_tasks
         self.args.machine_rank = job_env.node
 
-        self.args.slurm.jobid = job_env.job_id # just in case of need, e.g. logging to wandb
+        self.args.slurm.jobid = job_env.job_id  # just in case of need, e.g. logging to wandb
 
         print(f"Process group: {job_env.num_tasks} tasks, rank: {job_env.global_rank}")
 
 
 # @hydra.main(version_base=None, config_path="../configs/hydra", config_name="train_args.yaml")
 @hydra.main(config_path="../configs/hydra", config_name="train_args.yaml")
-def hydra_app(args:DictConfig):
+def hydra_app(args: DictConfig):
     # NOTE: enable write to unknow field of cfg
     # hence it behaves like argparse.NameSpace
     # this is required as some args are determined at runtime
@@ -151,10 +156,10 @@ def hydra_app(args:DictConfig):
     hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
     # since hydra 1.1.2 will change PWD to run dir, get current work dir first
     args.config_file = osp.join(get_original_cwd(), args.config_file)
-    
+
     # command line args starting with '+' are for overrides, except '+slurm=[cluster_id]'
-    args.opts = [ x.replace('+', '') for x in hydra_cfg['overrides']['task'] if (x.startswith('+') 
-                  and not x.startswith('+slurm'))]
+    args.opts = [x.replace('+', '') for x in hydra_cfg['overrides']['task'] if (x.startswith('+')
+                                                                                and not x.startswith('+slurm'))]
     # print(args.opts)
 
     hydra_run_dir = os.path.join(get_original_cwd(), hydra_cfg['run']['dir'])
@@ -164,8 +169,8 @@ def hydra_app(args:DictConfig):
 
     # test args
     # print(OmegaConf.to_yaml(args, resolve=True))
-   
-    if not hasattr(args, 'slurm'): # run locally
+
+    if not hasattr(args, 'slurm'):  # run locally
         launch(
             main,
             args.num_gpus,
@@ -174,16 +179,16 @@ def hydra_app(args:DictConfig):
             dist_url=args.dist_url,
             args=(args,),
         )
-    else: # run with slurm
-        if args.slurm.job_dir is None: # use hydra run_dir as slurm output dir
+    else:  # run with slurm
+        if args.slurm.job_dir is None:  # use hydra run_dir as slurm output dir
             hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
             args.slurm.job_dir = hydra_run_dir
-        
-        if args.slurm.master_port is None: # automatically find free port for ddp communication
+
+        if args.slurm.master_port is None:  # automatically find free port for ddp communication
             args.slurm.master_port = _find_free_port()
-        
+
         executor = submitit.AutoExecutor(folder=args.slurm.job_dir, slurm_max_num_timeout=30)
-        
+
         ############## NOTE: this part is highly dependent on slurm version ##############
         kwargs = {}
         if args.slurm.comment:
@@ -191,12 +196,12 @@ def hydra_app(args:DictConfig):
 
         # NOTE: slurm of different versions may have different flags
         # slurm_additional_parameters is flexible to cope with this scenario
-        slurm_additional_parameters={'ntasks': args.slurm.nodes*args.slurm.ngpus, 
-                                     'gres': f'gpu:{args.slurm.ngpus}',
-                                     'ntasks-per-node': args.slurm.ngpus} # one task per GPU
+        slurm_additional_parameters = {'ntasks': args.slurm.nodes * args.slurm.ngpus,
+                                       'gres': f'gpu:{args.slurm.ngpus}',
+                                       'ntasks-per-node': args.slurm.ngpus}  # one task per GPU
         if args.slurm.exclude_node:
             slurm_additional_parameters['exclude'] = args.slurm.exclude_node
-        
+
         if args.slurm.quotatype:
             slurm_additional_parameters['quotatype'] = args.slurm.quotatype
         ##################################################################################
@@ -215,7 +220,7 @@ def hydra_app(args:DictConfig):
             cpus_per_task=args.slurm.cpus_per_task,
             nodes=args.slurm.nodes,
             slurm_additional_parameters=slurm_additional_parameters,
-            timeout_min=args.slurm.timeout * 60, # in minutes
+            timeout_min=args.slurm.timeout * 60,  # in minutes
             # Below are cluster dependent parameters
             slurm_partition=args.slurm.partition,
             slurm_signal_delay_s=120,
@@ -230,10 +235,9 @@ def hydra_app(args:DictConfig):
 
         trainer = Trainer(args)
         job = executor.submit(trainer)
-        
+
         print("Submitted job_id:", job.job_id)
 
 
 if __name__ == '__main__':
     hydra_app()
-    
