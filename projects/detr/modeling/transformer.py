@@ -21,15 +21,15 @@ from detrex.layers import FFN, BaseTransformerLayer, MultiheadAttention, Transfo
 
 class DetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.1,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        post_norm: bool = True,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.1,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            post_norm: bool = True,
+            batch_first: bool = False,
     ):
         super(DetrTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -60,16 +60,16 @@ class DetrTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         for layer in self.layers:
@@ -92,16 +92,16 @@ class DetrTransformerEncoder(TransformerLayerSequence):
 
 class DetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.1,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        post_norm: bool = True,
-        return_intermediate: bool = True,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.1,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            post_norm: bool = True,
+            return_intermediate: bool = True,
+            batch_first: bool = False,
     ):
         super(DetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -132,16 +132,16 @@ class DetrTransformerDecoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         if not self.return_intermediate:

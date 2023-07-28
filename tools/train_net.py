@@ -247,6 +247,7 @@ def do_train(args, cfg):
             PathManager.mkdirs(cfg.train.wandb.params.dir)
             writers.append(WandbWriter(cfg))
 
+    # detectron2
     trainer.register_hooks(
         [
             hooks.IterationTimer(),

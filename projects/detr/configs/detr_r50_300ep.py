@@ -11,6 +11,7 @@ train.init_checkpoint = "detectron2://ImageNetPretrained/torchvision/R-50.pkl"
 train.output_dir = "./output/detr_r50_300ep"
 train.max_iter = 554400
 
+# 这个跟detectron2 一样需要推算下
 # modify lr_multiplier
 lr_multiplier.scheduler.milestones = [369600, 554400]
 
