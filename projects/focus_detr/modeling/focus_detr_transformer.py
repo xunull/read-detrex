@@ -319,6 +319,8 @@ class FOCUS_DETRTransformer(nn.Module):
                 m.init_weights()
         nn.init.normal_(self.level_embeds)
 
+    # 这个方法正常只在encoder后decoder之前调用
+    # 在Focus-DETR中也会在encoder之前调用一次
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes, process_output=True):
         """Make region proposals for each multi-scale features considering their shapes and padding masks,
         and project & normalize the encoder outputs corresponding to these proposals.
@@ -362,7 +364,7 @@ class FOCUS_DETRTransformer(nn.Module):
 
         output_memory = memory
 
-        # 这个地方稍微有点不一样
+        # 这个地方稍微有点不一样,这是给encoder之前调用时准备的
         if process_output:
             output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
             output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
@@ -427,6 +429,7 @@ class FOCUS_DETRTransformer(nn.Module):
             attn_masks,
             **kwargs,
     ):
+
         feat_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
@@ -434,7 +437,6 @@ class FOCUS_DETRTransformer(nn.Module):
         for lvl, (feat, mask, pos_embed) in enumerate(
                 zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
         ):
-
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
@@ -466,44 +468,67 @@ class FOCUS_DETRTransformer(nn.Module):
             backbone_output_memory, backbone_output_proposals, valid_token_nums = self.gen_encoder_output_proposals(
                 feat_flatten + lvl_pos_embed_flatten, mask_flatten, spatial_shapes,
                 process_output=bool(self.focus_rho))
+
+            # 有效的token数量
             self.valid_token_nums = valid_token_nums
+
             focus_token_nums = (valid_token_nums * self.focus_rho).int() + 1
             foreground_topk = int(max(focus_token_nums))
             self.focus_token_nums = focus_token_nums
+            # cascade_set tensor([1.0000, 0.8000, 0.6000, 0.6000, 0.4000, 0.2000])
             encoder_foreground_topk = self.cascade_set * foreground_topk
+
             foreground_score = []
             for i in range(self.num_feature_levels):
                 if i == 0:
-                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels - 1]:, :]
+                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels - 1]:,
+                                   :]  # 这里取出的是最高层的特征层的token
+                    # token的分数 [bs,1,h,w]
                     score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs, 1, spatial_shapes[
                         self.num_feature_levels - 1][0], spatial_shapes[self.num_feature_levels - 1][1])
+                    # [bs,hw,1]
                     foreground_score.append(score_prediction_lvl.view(bs, -1, 1))
                 else:
                     backbone_lvl = backbone_output_memory[:,
                                    level_start_index[self.num_feature_levels - i - 1]:level_start_index[
                                        self.num_feature_levels - i - 0], :]
+                    # 这时的score_prediction_lvl还是上一个level的，上一个高层级level的,score进行上采样
                     up_score = self.upsamplelike((score_prediction_lvl, (
                         spatial_shapes[self.num_feature_levels - i - 1][0],
                         spatial_shapes[self.num_feature_levels - i - 1][1])))
+                    # [bs,hw,256] -> [bs,256,h,w]
                     re_backbone_lvl = backbone_lvl.reshape(bs, spatial_shapes[self.num_feature_levels - i - 1][0],
                                                            spatial_shapes[self.num_feature_levels - i - 1][1],
                                                            -1).permute(0, 3, 1, 2)
+                    # 公式2
+                    # 使用高层级的分数调制backbone的token
+                    # 图5，上一个level的分数经过上采样后，乘上一个因子，然后与当前的token相乘，最后加上当前层的token
+                    # [bs,hw,256]
                     backbone_lvl = backbone_lvl + (re_backbone_lvl * up_score * self.alpha[i - 1]).permute(0, 2, 3,
                                                                                                            1).reshape(
                         bs, -1, self.embed_dim)
+                    # 然后经过FTS得到分数
                     score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs, 1, spatial_shapes[
                         self.num_feature_levels - i - 1][0], spatial_shapes[self.num_feature_levels - i - 1][1])
+
                     foreground_score.append(score_prediction_lvl)
+
             backbone_mask_prediction = torch.cat(
                 [foreground_score[3 - i].view(bs, -1, 1) for i in range(len(foreground_score))], dim=1)
+
             temp_backbone_mask_prediction = backbone_mask_prediction
+
             backbone_mask_prediction = backbone_mask_prediction.squeeze(-1)
+
             backbone_mask_prediction = backbone_mask_prediction.masked_fill(mask_flatten,
                                                                             backbone_mask_prediction.min())
+
             foreground_inds = []
+
             for i in range(len(self.cascade_set)):
                 foreground_proposal = torch.topk(backbone_mask_prediction, int(encoder_foreground_topk[i]), dim=1)[1]
                 foreground_inds.append(foreground_proposal)
+
         # two stage
         enc_topk_proposals = enc_refpoint_embed = None
         memory = self.encoder(
@@ -586,6 +611,7 @@ class FOCUS_DETRTransformer(nn.Module):
         )
 
 
+# 这个是FTS模块
 class MaskPredictor(nn.Module):
     def __init__(self, in_dim, h_dim):
         super().__init__()
