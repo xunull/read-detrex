@@ -1,8 +1,8 @@
-#Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
 
-#This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
+# This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
 
-#This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
 
 # coding=utf-8
 # Copyright 2022 The IDEA Authors. All rights reserved.
@@ -32,6 +32,8 @@ from detrex.utils import inverse_sigmoid
 from detectron2.modeling import detector_postprocess
 from detectron2.structures import Boxes, ImageList, Instances
 
+
+# todo 在DINO基础上？
 class FOCUS_DETR(nn.Module):
     """Implement DAB-Deformable-DETR in `DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR
     <https://arxiv.org/abs/2203.03605>`_.
@@ -59,23 +61,23 @@ class FOCUS_DETR(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone: nn.Module,
-        position_embedding: nn.Module,
-        neck: nn.Module,
-        transformer: nn.Module,
-        embed_dim: int,
-        num_classes: int,
-        num_queries: int,
-        criterion: nn.Module,
-        pixel_mean: List[float] = [123.675, 116.280, 103.530],
-        pixel_std: List[float] = [58.395, 57.120, 57.375],
-        aux_loss: bool = True,
-        select_box_nums_for_evaluation: int = 300,
-        device="cuda",
-        dn_number: int = 100,
-        label_noise_ratio: float = 0.2,
-        box_noise_scale: float = 1.0,
+            self,
+            backbone: nn.Module,
+            position_embedding: nn.Module,
+            neck: nn.Module,
+            transformer: nn.Module,
+            embed_dim: int,
+            num_classes: int,
+            num_queries: int,
+            criterion: nn.Module,
+            pixel_mean: List[float] = [123.675, 116.280, 103.530],
+            pixel_std: List[float] = [58.395, 57.120, 57.375],
+            aux_loss: bool = True,
+            select_box_nums_for_evaluation: int = 300,
+            device="cuda",
+            dn_number: int = 100,
+            label_noise_ratio: float = 0.2,
+            box_noise_scale: float = 1.0,
     ):
         super().__init__()
         # define backbone and position embedding module
@@ -98,6 +100,7 @@ class FOCUS_DETR(nn.Module):
         self.aux_loss = aux_loss
         self.criterion = criterion
 
+        # todo
         # denoising
         self.label_enc = nn.Embedding(num_classes, embed_dim)
         self.dn_number = dn_number
@@ -115,7 +118,7 @@ class FOCUS_DETR(nn.Module):
         bias_value = -math.log((1 - prior_prob) / prior_prob)
         self.class_embed.bias.data = torch.ones(num_classes) * bias_value
         nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
-        
+
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
         for _, neck_layer in self.neck.named_modules():
             if isinstance(neck_layer, nn.Conv2d):
@@ -125,7 +128,8 @@ class FOCUS_DETR(nn.Module):
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = transformer.decoder.num_layers + 1
         self.class_embed = nn.ModuleList([copy.deepcopy(self.class_embed) for i in range(num_pred)])
-        self.enhance_MCSP_layerlist = nn.ModuleList([self.class_embed[transformer.encoder.num_layers] for i in range(transformer.encoder.num_layers)])
+        self.enhance_MCSP_layerlist = nn.ModuleList(
+            [self.class_embed[transformer.encoder.num_layers] for i in range(transformer.encoder.num_layers)])
         self.bbox_embed = nn.ModuleList([copy.deepcopy(self.bbox_embed) for i in range(num_pred)])
         nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
         # two-stage
@@ -191,6 +195,7 @@ class FOCUS_DETR(nn.Module):
         # denoising preprocessing
         # prepare label query embedding
         if self.training:
+            # DINO的cdn的处理
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
             targets = self.prepare_targets(gt_instances)
             input_query_label, input_query_bbox, attn_mask, dn_meta = self.prepare_for_cdn(
@@ -205,6 +210,7 @@ class FOCUS_DETR(nn.Module):
             )
         else:
             input_query_label, input_query_bbox, attn_mask, dn_meta = None, None, None, None
+
         query_embeds = (input_query_label, input_query_bbox)
 
         # feed into transformer
@@ -222,6 +228,7 @@ class FOCUS_DETR(nn.Module):
             query_embeds,
             attn_masks=[attn_mask, None],
         )
+
         # hack implementation for distributed training
         inter_states[0] += self.label_enc.weight[0, 0] * 0.0
 
@@ -244,6 +251,7 @@ class FOCUS_DETR(nn.Module):
             outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
+
         outputs_class = torch.stack(outputs_classes)
         # tensor shape: [num_decoder_layers, bs, num_query, num_classes]
         outputs_coord = torch.stack(outputs_coords)
@@ -260,7 +268,7 @@ class FOCUS_DETR(nn.Module):
         if self.aux_loss:
             output["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
         output["temp_backbone_mask_prediction"] = temp_backbone_mask_prediction
-        output["srcs"]=multi_level_feats
+        output["srcs"] = multi_level_feats
         # prepare two stage output
         interm_coord = enc_reference
         interm_class = self.transformer.decoder.class_embed[-1](enc_state)
@@ -279,7 +287,7 @@ class FOCUS_DETR(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -298,15 +306,15 @@ class FOCUS_DETR(nn.Module):
         ]
 
     def prepare_for_cdn(
-        self,
-        targets,
-        dn_number,
-        label_noise_ratio,
-        box_noise_scale,
-        num_queries,
-        num_classes,
-        hidden_dim,
-        label_enc,
+            self,
+            targets,
+            dn_number,
+            label_noise_ratio,
+            box_noise_scale,
+            num_queries,
+            num_classes,
+            hidden_dim,
+            label_enc,
     ):
         """
         A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding
@@ -379,7 +387,7 @@ class FOCUS_DETR(nn.Module):
             diff[:, 2:] = known_bboxs[:, 2:] / 2
 
             rand_sign = (
-                torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
+                    torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
             )
             rand_part = torch.rand_like(known_bboxs)
             rand_part[negative_idx] += 1.0
@@ -419,20 +427,20 @@ class FOCUS_DETR(nn.Module):
         for i in range(dn_number):
             if i == 0:
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1),
-                    single_padding * 2 * (i + 1) : pad_size,
+                single_padding * 2 * i: single_padding * 2 * (i + 1),
+                single_padding * 2 * (i + 1): pad_size,
                 ] = True
             if i == dn_number - 1:
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1), : single_padding * i * 2
+                single_padding * 2 * i: single_padding * 2 * (i + 1), : single_padding * i * 2
                 ] = True
             else:
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1),
-                    single_padding * 2 * (i + 1) : pad_size,
+                single_padding * 2 * i: single_padding * 2 * (i + 1),
+                single_padding * 2 * (i + 1): pad_size,
                 ] = True
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1), : single_padding * 2 * i
+                single_padding * 2 * i: single_padding * 2 * (i + 1), : single_padding * 2 * i
                 ] = True
 
         dn_meta = {
@@ -493,7 +501,7 @@ class FOCUS_DETR(nn.Module):
         # scores, labels = F.softmax(box_cls, dim=-1)[:, :, :-1].max(-1)
 
         for i, (scores_per_image, labels_per_image, box_pred_per_image, image_size) in enumerate(
-            zip(scores, labels, boxes, image_sizes)
+                zip(scores, labels, boxes, image_sizes)
         ):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))
@@ -503,6 +511,7 @@ class FOCUS_DETR(nn.Module):
             result.pred_classes = labels_per_image
             results.append(result)
         return results
+
     def prepare_targets(self, targets):
         new_targets = []
         for targets_per_image in targets:
@@ -511,5 +520,5 @@ class FOCUS_DETR(nn.Module):
             gt_classes = targets_per_image.gt_classes
             gt_boxes = targets_per_image.gt_boxes.tensor / image_size_xyxy
             gt_boxes = box_xyxy_to_cxcywh(gt_boxes)
-            new_targets.append({"labels": gt_classes, "boxes": gt_boxes,"size":targets_per_image.image_size})
+            new_targets.append({"labels": gt_classes, "boxes": gt_boxes, "size": targets_per_image.image_size})
         return new_targets

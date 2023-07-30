@@ -1,10 +1,12 @@
 # Common training-related configs that are designed for "tools/train_net.py"
 # You can use your own instead, together with your own train_net.py
 train = dict(
+    # 输出路径
     # Directory where output files are written to
     output_dir="./output",
     # The initialize checkpoint to be loaded
     init_checkpoint="",
+    # 最大训练迭代数据
     # The total training iterations
     max_iter=90000,
     # options for Automatic Mixed Precision

@@ -1,8 +1,8 @@
-#Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
 
-#This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
+# This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
 
-#This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
 
 import copy
 import torch.nn as nn
@@ -12,7 +12,6 @@ from detectron2.layers import ShapeSpec
 from detectron2.config import LazyCall as L
 
 from detrex.modeling.matcher import HungarianMatcher
-from detrex.modeling.neck import ChannelMapper
 from detrex.modeling.neck import ChannelMapper
 from detrex.layers import PositionEmbeddingSine
 
@@ -41,6 +40,7 @@ model = L(FOCUS_DETR)(
         normalize=True,
         offset=-0.5,
     ),
+    # 输出成token
     neck=L(ChannelMapper)(
         input_shapes={
             "res3": ShapeSpec(channels=512),
@@ -62,6 +62,8 @@ model = L(FOCUS_DETR)(
             ffn_dropout=0.0,
             num_layers=6,
             post_norm=False,
+            # 引用外面一层的num_feature_levels变量
+            # 4个特征层
             num_feature_levels="${..num_feature_levels}",
         ),
         decoder=L(FOCUS_DETRTransformerDecoder)(
@@ -75,8 +77,9 @@ model = L(FOCUS_DETR)(
             num_feature_levels="${..num_feature_levels}",
         ),
         num_feature_levels=4,
+        # 900个query
         two_stage_num_proposals="${..num_queries}",
-        
+
     ),
     embed_dim=256,
     num_classes=80,

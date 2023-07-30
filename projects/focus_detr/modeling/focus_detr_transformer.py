@@ -1,8 +1,8 @@
-#Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
 
-#This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
+# This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
 
-#This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
 
 # coding=utf-8
 # Copyright 2022 The IDEA Authors. All rights reserved.
@@ -35,15 +35,15 @@ from .transformer_layer import Focus_DETR_BaseTransformerLayer
 
 class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        feedforward_dim: int = 1024,
-        attn_dropout: float = 0.1,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        post_norm: bool = False,
-        num_feature_levels: int = 4,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            feedforward_dim: int = 1024,
+            attn_dropout: float = 0.1,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            post_norm: bool = False,
+            num_feature_levels: int = 4,
     ):
         super(FOCUS_DETRTransformerEncoder, self).__init__(
             transformer_layers=Focus_DETR_BaseTransformerLayer(
@@ -81,35 +81,38 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = nn.LayerNorm(self.embed_dim)
         else:
             self.post_norm_layer = None
+
     def forward(
-        self,
-        backbone_mask_prediction,
-        focus_token_nums,
-        foreground_inds,
-        reference_points,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            backbone_mask_prediction,
+            focus_token_nums,
+            foreground_inds,
+            reference_points,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
         B_, N_, S_, P_ = reference_points.shape
         ori_reference_points = reference_points
         ori_pos = query_pos
-        output=query
+        output = query
         for layer_id, layer in enumerate(self.layers):
-        # for layer in self.layers:
+            # for layer in self.layers:
             query = torch.gather(output, 1, foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, output.size(-1)))
-            query_pos = torch.gather(ori_pos, 1, foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, query_pos.size(-1)))
+            query_pos = torch.gather(ori_pos, 1,
+                                     foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, query_pos.size(-1)))
             foreground_pre_layer = torch.gather(backbone_mask_prediction, 1, foreground_inds[layer_id])
             reference_points = torch.gather(ori_reference_points.view(B_, N_, -1), 1,
-                                        foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, S_ * P_)).view(B_, -1, S_,P_)
+                                            foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, S_ * P_)).view(B_, -1,
+                                                                                                                S_, P_)
             dropflag = False
-            score_tgt=self.enhance_MCSP[layer_id](query)
+            score_tgt = self.enhance_MCSP[layer_id](query)
             query = layer(
                 foreground_pre_layer,
                 score_tgt,
@@ -125,28 +128,33 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
             )
             outputs = []
             for i in range(foreground_inds[layer_id].shape[0]):
-                outputs.append(output[i].scatter(0, foreground_inds[layer_id][i][:focus_token_nums[i]].unsqueeze(-1).repeat(1,query.size(-1)),query[i][:focus_token_nums[i]]))
+                outputs.append(output[i].scatter(0, foreground_inds[layer_id][i][:focus_token_nums[i]].unsqueeze(
+                    -1).repeat(1, query.size(-1)), query[i][:focus_token_nums[i]]))
             output = torch.stack(outputs)
         if self.post_norm_layer is not None:
             output = self.post_norm_layer(output)
         return output
+
+
 def _get_clones(module, N, layer_share=False):
     if layer_share:
         return nn.ModuleList([module for i in range(N)])
     else:
         return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
+
+
 class FOCUS_DETRTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        feedforward_dim: int = 1024,
-        attn_dropout: float = 0.1,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        return_intermediate: bool = True,
-        num_feature_levels: int = 4,
-        look_forward_twice=True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            feedforward_dim: int = 1024,
+            attn_dropout: float = 0.1,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            return_intermediate: bool = True,
+            num_feature_levels: int = 4,
+            look_forward_twice=True,
     ):
         super(FOCUS_DETRTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -182,19 +190,20 @@ class FOCUS_DETRTransformerDecoder(TransformerLayerSequence):
         self.class_embed = None
         self.look_forward_twice = look_forward_twice
         self.norm = nn.LayerNorm(embed_dim)
+
     def forward(
-        self,
-        query,
-        key,
-        value,
-        reference_points=None,  # num_queries, 4. normalized.
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        valid_ratios=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            reference_points=None,  # num_queries, 4. normalized.
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            valid_ratios=None,
+            **kwargs,
     ):
         output = query
         bs, num_queries, _ = output.size()
@@ -205,8 +214,8 @@ class FOCUS_DETRTransformerDecoder(TransformerLayerSequence):
         for layer_idx, layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = (
-                    reference_points[:, :, None]
-                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                        reference_points[:, :, None]
+                        * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             else:
                 assert reference_points.shape[-1] == 2
@@ -249,6 +258,8 @@ class FOCUS_DETRTransformerDecoder(TransformerLayerSequence):
         if self.return_intermediate:
             return torch.stack(intermediate), torch.stack(intermediate_reference_points)
         return output, reference_points
+
+
 class FOCUS_DETRTransformer(nn.Module):
     """Transformer module for FOCUS_DETR
 
@@ -261,18 +272,18 @@ class FOCUS_DETRTransformer(nn.Module):
     """
 
     def __init__(
-        self,
-        encoder=None,
-        decoder=None,
-        num_feature_levels=4,
-        two_stage_num_proposals=900,
-        learnt_init_query=True,
+            self,
+            encoder=None,
+            decoder=None,
+            num_feature_levels=4,
+            two_stage_num_proposals=900,
+            learnt_init_query=True,
     ):
         super(FOCUS_DETRTransformer, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.focus_rho = 0.5
-        self.cascade_set = torch.Tensor([1.0,0.8,0.6,0.6,0.4,0.2])
+        self.cascade_set = torch.Tensor([1.0, 0.8, 0.6, 0.6, 0.4, 0.2])
         self.alpha = nn.Parameter(data=torch.Tensor(3), requires_grad=True)
         self.alpha.data.uniform_(-0.3, 0.3)
         self.num_feature_levels = num_feature_levels
@@ -337,6 +348,7 @@ class FOCUS_DETRTransformer(nn.Module):
         valid_ratio_w = valid_W.float() / W
         valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
         return valid_ratio
+
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes, process_output=True):
         """Make region proposals for each multi-scale features considering their shapes and padding masks,
         and project & normalize the encoder outputs corresponding to these proposals.
@@ -388,21 +400,22 @@ class FOCUS_DETRTransformer(nn.Module):
     def upsamplelike(self, inputs):
         src, size = inputs
         return F.interpolate(src, size, mode='bilinear', align_corners=True)
+
     def forward(
-        self,
-        multi_level_feats,
-        multi_level_masks,
-        multi_level_pos_embeds,
-        query_embed,
-        attn_masks,
-        **kwargs,
+            self,
+            multi_level_feats,
+            multi_level_masks,
+            multi_level_pos_embeds,
+            query_embed,
+            attn_masks,
+            **kwargs,
     ):
         feat_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
         for lvl, (feat, mask, pos_embed) in enumerate(
-            zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
+                zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
         ):
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
@@ -436,28 +449,39 @@ class FOCUS_DETRTransformer(nn.Module):
             focus_token_nums = (valid_token_nums * self.focus_rho).int() + 1
             foreground_topk = int(max(focus_token_nums))
             self.focus_token_nums = focus_token_nums
-            encoder_foreground_topk = self.cascade_set*foreground_topk
+            encoder_foreground_topk = self.cascade_set * foreground_topk
             foreground_score = []
             for i in range(self.num_feature_levels):
-                if i==0:
-                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels-1]:, :]
-                    score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs,1,spatial_shapes[self.num_feature_levels-1][0],spatial_shapes[self.num_feature_levels-1][1])
-                    foreground_score.append(score_prediction_lvl.view(bs, -1,1))
+                if i == 0:
+                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels - 1]:, :]
+                    score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs, 1, spatial_shapes[
+                        self.num_feature_levels - 1][0], spatial_shapes[self.num_feature_levels - 1][1])
+                    foreground_score.append(score_prediction_lvl.view(bs, -1, 1))
                 else:
-                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels-i-1]:level_start_index[self.num_feature_levels-i-0], :]
-                    up_score = self.upsamplelike((score_prediction_lvl, (spatial_shapes[self.num_feature_levels-i-1][0],spatial_shapes[self.num_feature_levels-i-1][1])))
-                    re_backbone_lvl = backbone_lvl.reshape(bs,spatial_shapes[self.num_feature_levels-i-1][0],spatial_shapes[self.num_feature_levels-i-1][1],-1).permute(0,3,1,2)
-                    backbone_lvl = backbone_lvl + (re_backbone_lvl*up_score* self.alpha[i-1]).permute(0,2,3,1).reshape(bs,-1,self.embed_dim)
-                    score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs,1,spatial_shapes[self.num_feature_levels-i-1][0],spatial_shapes[self.num_feature_levels-i-1][1])
+                    backbone_lvl = backbone_output_memory[:,
+                                   level_start_index[self.num_feature_levels - i - 1]:level_start_index[
+                                       self.num_feature_levels - i - 0], :]
+                    up_score = self.upsamplelike((score_prediction_lvl, (
+                        spatial_shapes[self.num_feature_levels - i - 1][0],
+                        spatial_shapes[self.num_feature_levels - i - 1][1])))
+                    re_backbone_lvl = backbone_lvl.reshape(bs, spatial_shapes[self.num_feature_levels - i - 1][0],
+                                                           spatial_shapes[self.num_feature_levels - i - 1][1],
+                                                           -1).permute(0, 3, 1, 2)
+                    backbone_lvl = backbone_lvl + (re_backbone_lvl * up_score * self.alpha[i - 1]).permute(0, 2, 3,
+                                                                                                           1).reshape(
+                        bs, -1, self.embed_dim)
+                    score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs, 1, spatial_shapes[
+                        self.num_feature_levels - i - 1][0], spatial_shapes[self.num_feature_levels - i - 1][1])
                     foreground_score.append(score_prediction_lvl)
-            backbone_mask_prediction = torch.cat([foreground_score[3-i].view(bs, -1,1) for i in range(len(foreground_score))], dim=1)
+            backbone_mask_prediction = torch.cat(
+                [foreground_score[3 - i].view(bs, -1, 1) for i in range(len(foreground_score))], dim=1)
             temp_backbone_mask_prediction = backbone_mask_prediction
             backbone_mask_prediction = backbone_mask_prediction.squeeze(-1)
             backbone_mask_prediction = backbone_mask_prediction.masked_fill(mask_flatten,
                                                                             backbone_mask_prediction.min())
-            foreground_inds=[]
+            foreground_inds = []
             for i in range(len(self.cascade_set)):
-                foreground_proposal=torch.topk(backbone_mask_prediction, int(encoder_foreground_topk[i]), dim=1)[1]
+                foreground_proposal = torch.topk(backbone_mask_prediction, int(encoder_foreground_topk[i]), dim=1)[1]
                 foreground_inds.append(foreground_proposal)
         # two stage
         enc_topk_proposals = enc_refpoint_embed = None
@@ -471,26 +495,26 @@ class FOCUS_DETRTransformer(nn.Module):
             value=feat_flatten,
             query_pos=lvl_pos_embed_flatten,
             query_key_padding_mask=mask_flatten,
-            spatial_shapes=spatial_shapes, 
+            spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             valid_ratios=valid_ratios,
             **kwargs,
         )
-        output_memory, output_proposals,_ = self.gen_encoder_output_proposals(
+        output_memory, output_proposals, _ = self.gen_encoder_output_proposals(
             memory, mask_flatten, spatial_shapes
         )
         # output_memory: bs, num_tokens, c
         # output_proposals: bs, num_tokens, 4. unsigmoided.
         enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
         enc_outputs_coord_unact = (
-            self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
-        )  
+                self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
+        )
         topk = self.two_stage_num_proposals
         topk_proposals = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1]
         # extract region proposal boxes
         topk_coords_unact = torch.gather(
             enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
-        )  
+        )
         # unsigmoided.
         reference_points = topk_coords_unact.detach().sigmoid()
         if query_embed[1] is not None:
@@ -515,7 +539,7 @@ class FOCUS_DETRTransformer(nn.Module):
             reference_points=reference_points,  # num_queries, 4
             query_pos=None,
             key_padding_mask=mask_flatten,  # bs, num_tokens
-            
+
             spatial_shapes=spatial_shapes,  # nlvl, 2
             level_start_index=level_start_index,  # nlvl
             valid_ratios=valid_ratios,  # bs, nlvl, 2
@@ -532,6 +556,8 @@ class FOCUS_DETRTransformer(nn.Module):
             topk_coords_unact.sigmoid(),
             temp_backbone_mask_prediction,
         )
+
+
 class MaskPredictor(nn.Module):
     def __init__(self, in_dim, h_dim):
         super().__init__()
