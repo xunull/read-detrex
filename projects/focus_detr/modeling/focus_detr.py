@@ -34,6 +34,7 @@ from detectron2.structures import Boxes, ImageList, Instances
 
 
 # todo 在DINO基础上？
+# 基本上是DINO的结构
 class FOCUS_DETR(nn.Module):
     """Implement DAB-Deformable-DETR in `DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR
     <https://arxiv.org/abs/2203.03605>`_.
@@ -88,6 +89,7 @@ class FOCUS_DETR(nn.Module):
         # number of dynamic anchor boxes and embedding dimension
         self.num_queries = num_queries
         self.embed_dim = embed_dim
+
         # define transformer module
         self.transformer = transformer
 

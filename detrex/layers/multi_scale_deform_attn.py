@@ -44,13 +44,13 @@ def _is_power_of_2(n):
 class MultiScaleDeformableAttnFunction(Function):
     @staticmethod
     def forward(
-        ctx,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
+            ctx,
+            value,
+            value_spatial_shapes,
+            value_level_start_index,
+            sampling_locations,
+            attention_weights,
+            im2col_step,
     ):
         ctx.im2col_step = im2col_step
         output = _C.ms_deform_attn_forward(
@@ -94,12 +94,11 @@ class MultiScaleDeformableAttnFunction(Function):
 
 
 def multi_scale_deformable_attn_pytorch(
-    value: torch.Tensor,
-    value_spatial_shapes: torch.Tensor,
-    sampling_locations: torch.Tensor,
-    attention_weights: torch.Tensor,
+        value: torch.Tensor,
+        value_spatial_shapes: torch.Tensor,
+        sampling_locations: torch.Tensor,
+        attention_weights: torch.Tensor,
 ) -> torch.Tensor:
-
     bs, _, num_heads, embed_dims = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
     value_list = value.split([H_ * W_ for H_, W_ in value_spatial_shapes], dim=1)
@@ -136,6 +135,7 @@ def multi_scale_deformable_attn_pytorch(
     return output.transpose(1, 2).contiguous()
 
 
+# 多尺度变形Attention
 class MultiScaleDeformableAttention(nn.Module):
     """Multi-Scale Deformable Attention Module used in Deformable-DETR
 
@@ -155,14 +155,14 @@ class MultiScaleDeformableAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        num_levels: int = 4,
-        num_points: int = 4,
-        img2col_step: int = 64,
-        dropout: float = 0.1,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            num_levels: int = 4,
+            num_points: int = 4,
+            img2col_step: int = 64,
+            dropout: float = 0.1,
+            batch_first: bool = False,
     ):
         super().__init__()
         if embed_dim % num_heads != 0:
@@ -203,7 +203,7 @@ class MultiScaleDeformableAttention(nn.Module):
         """
         constant_(self.sampling_offsets.weight.data, 0.0)
         thetas = torch.arange(self.num_heads, dtype=torch.float32) * (
-            2.0 * math.pi / self.num_heads
+                2.0 * math.pi / self.num_heads
         )
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
@@ -223,17 +223,17 @@ class MultiScaleDeformableAttention(nn.Module):
         constant_(self.output_proj.bias.data, 0.0)
 
     def forward(
-        self,
-        query: torch.Tensor,
-        key: Optional[torch.Tensor] = None,
-        value: Optional[torch.Tensor] = None,
-        identity: Optional[torch.Tensor] = None,
-        query_pos: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
-        reference_points: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        level_start_index: Optional[torch.Tensor] = None,
-        **kwargs
+            self,
+            query: torch.Tensor,
+            key: Optional[torch.Tensor] = None,
+            value: Optional[torch.Tensor] = None,
+            identity: Optional[torch.Tensor] = None,
+            query_pos: Optional[torch.Tensor] = None,
+            key_padding_mask: Optional[torch.Tensor] = None,
+            reference_points: Optional[torch.Tensor] = None,
+            spatial_shapes: Optional[torch.Tensor] = None,
+            level_start_index: Optional[torch.Tensor] = None,
+            **kwargs
     ) -> torch.Tensor:
 
         """Forward Function of MultiScaleDeformableAttention
@@ -311,24 +311,24 @@ class MultiScaleDeformableAttention(nn.Module):
 
         # bs, num_query, num_heads, num_levels, num_points, 2
         if reference_points.shape[-1] == 2:
-            
+
             # reference_points   [bs, all hw, 4, 2] -> [bs, all hw, 1, 4, 1, 2]
             # sampling_offsets   [bs, all hw, 8, 4, 4, 2]
             # offset_normalizer  [4, 2] -> [1, 1, 1, 4, 1, 2]
             # references_points + sampling_offsets
-            
+
             offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
             sampling_locations = (
-                reference_points[:, :, None, :, None, :]
-                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+                    reference_points[:, :, None, :, None, :]
+                    + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
         elif reference_points.shape[-1] == 4:
             sampling_locations = (
-                reference_points[:, :, None, :, None, :2]
-                + sampling_offsets
-                / self.num_points
-                * reference_points[:, :, None, :, None, 2:]
-                * 0.5
+                    reference_points[:, :, None, :, None, :2]
+                    + sampling_offsets
+                    / self.num_points
+                    * reference_points[:, :, None, :, None, 2:]
+                    * 0.5
             )
         else:
             raise ValueError(
@@ -336,11 +336,11 @@ class MultiScaleDeformableAttention(nn.Module):
                     reference_points.shape[-1]
                 )
             )
-        
+
         # the original impl for fp32 training
         if torch.cuda.is_available() and value.is_cuda:
             output = MultiScaleDeformableAttnFunction.apply(
-                value.to(torch.float32) if value.dtype==torch.float16 else value,
+                value.to(torch.float32) if value.dtype == torch.float16 else value,
                 spatial_shapes,
                 level_start_index,
                 sampling_locations,
@@ -352,8 +352,8 @@ class MultiScaleDeformableAttention(nn.Module):
                 value, spatial_shapes, sampling_locations, attention_weights
             )
 
-        if value.dtype==torch.float16:
-            output=output.to(torch.float16)
+        if value.dtype == torch.float16:
+            output = output.to(torch.float16)
 
         output = self.output_proj(output)
 

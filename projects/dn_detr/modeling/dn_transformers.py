@@ -276,6 +276,7 @@ class DNDetrTransformer(nn.Module):
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
 
         mask = mask.view(bs, -1)
+        # 经过encoder
         memory = self.encoder(
             query=x,
             key=None,
@@ -284,6 +285,7 @@ class DNDetrTransformer(nn.Module):
             query_key_padding_mask=mask,
         )
 
+        # 经过decoder
         hidden_state, references = self.decoder(
             query=target,
             key=memory,

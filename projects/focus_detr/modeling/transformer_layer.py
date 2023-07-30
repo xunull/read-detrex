@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 from detrex.layers.mlp import FFN
 
+
 class BaseTransformerLayer(nn.Module):
     # TODO: add more tutorials about BaseTransformerLayer
     """The implementation of Base `TransformerLayer` used in Transformer. Modified
@@ -47,18 +48,25 @@ class BaseTransformerLayer(nn.Module):
             Support `prenorm` when you specifying the first element as `norm`.
             Default = None.
     """
+
     def __init__(
-        self,
-        attn: List[nn.Module],
-        ffn: nn.Module,
-        norm: nn.Module,
-        operation_order: tuple = None,
+            self,
+            attn: List[nn.Module],
+            ffn: nn.Module,
+            norm: nn.Module,
+            operation_order: tuple = None,
     ):
+        """
+        transformer中的attn网络，ffn网络，norm网络，传入进来
+        """
         super(BaseTransformerLayer, self).__init__()
-        assert set(operation_order).issubset({"self_attn","encoder_cross_attn", "norm", "cross_attn", "ffn"})
+        # 模型的执行顺序
+        assert set(operation_order).issubset({"self_attn", "encoder_cross_attn", "norm", "cross_attn", "ffn"})
 
         # count attention nums
-        num_attn = operation_order.count("self_attn") + operation_order.count("cross_attn") + operation_order.count("encoder_cross_attn")
+        num_attn = operation_order.count("self_attn") + operation_order.count("cross_attn") + operation_order.count(
+            "encoder_cross_attn")
+
         if isinstance(attn, nn.Module):
             attn = [copy.deepcopy(attn) for _ in range(num_attn)]
         else:
@@ -72,33 +80,37 @@ class BaseTransformerLayer(nn.Module):
         self.pre_norm = operation_order[0] == "norm"
         self.attentions = nn.ModuleList()
         index = 0
+
         for operation_name in operation_order:
-            if operation_name in ["self_attn", "encoder_cross_attn","cross_attn"]:
+            if operation_name in ["self_attn", "encoder_cross_attn", "cross_attn"]:
                 self.attentions.append(attn[index])
                 index += 1
         self.embed_dim = self.attentions[0].embed_dim
+
         # count ffn nums
         self.ffns = nn.ModuleList()
         num_ffns = operation_order.count("ffn")
         for _ in range(num_ffns):
             self.ffns.append(copy.deepcopy(ffn))
+
         # count norm nums
         self.norms = nn.ModuleList()
         num_norms = operation_order.count("norm")
         for _ in range(num_norms):
             self.norms.append(copy.deepcopy(norm))
+
     def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor = None,
-        value: torch.Tensor = None,
-        query_pos: torch.Tensor = None,
-        key_pos: torch.Tensor = None,
-        attn_masks: List[torch.Tensor] = None,
-        query_key_padding_mask: torch.Tensor = None,
-        key_padding_mask: torch.Tensor = None,
-        reference_points: torch.Tensor = None,
-        **kwargs,
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor = None,
+            value: torch.Tensor = None,
+            query_pos: torch.Tensor = None,
+            key_pos: torch.Tensor = None,
+            attn_masks: List[torch.Tensor] = None,
+            query_key_padding_mask: torch.Tensor = None,
+            key_padding_mask: torch.Tensor = None,
+            reference_points: torch.Tensor = None,
+            **kwargs,
     ):
         """Forward function for `BaseTransformerLayer`.
         **kwargs contains the specific arguments of attentions.
@@ -218,18 +230,22 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
             Support `prenorm` when you specifying the first element as `norm`.
             Default = None.
     """
+
     def __init__(
-        self,
-        attn: List[nn.Module],
-        ffn: nn.Module,
-        norm: nn.Module,
-        operation_order: tuple = None,
+            self,
+            attn: List[nn.Module],
+            ffn: nn.Module,
+            norm: nn.Module,
+            operation_order: tuple = None,
     ):
         super(Focus_DETR_BaseTransformerLayer, self).__init__()
-        assert set(operation_order).issubset({"self_attn","OESM","encoder_cross_attn", "norm", "cross_attn", "ffn"})
+
+        # 相比于detrex的transformer 这个地方进行了修改为了适应这篇论文
+        assert set(operation_order).issubset({"self_attn", "OESM", "encoder_cross_attn", "norm", "cross_attn", "ffn"})
         self.topk_sa = 300
         # count attention nums
-        num_attn = operation_order.count("self_attn") + operation_order.count("cross_attn") + operation_order.count("encoder_cross_attn")+ operation_order.count("OESM")
+        num_attn = operation_order.count("self_attn") + operation_order.count("cross_attn") + operation_order.count(
+            "encoder_cross_attn") + operation_order.count("OESM")
         if isinstance(attn, nn.Module):
             attn = [copy.deepcopy(attn) for _ in range(num_attn)]
         else:
@@ -244,7 +260,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
         self.attentions = nn.ModuleList()
         index = 0
         for operation_name in operation_order:
-            if operation_name in ["self_attn","OESM", "encoder_cross_attn","cross_attn"]:
+            if operation_name in ["self_attn", "OESM", "encoder_cross_attn", "cross_attn"]:
                 self.attentions.append(attn[index])
                 index += 1
         self.embed_dim = self.attentions[0].embed_dim
@@ -259,20 +275,21 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
         num_norms = operation_order.count("norm")
         for _ in range(num_norms):
             self.norms.append(copy.deepcopy(norm))
+
     def forward(
-        self,
-        foreground_pre_layer: torch.Tensor,
-        score_tgt: torch.Tensor,
-        query: torch.Tensor,
-        key: torch.Tensor = None,
-        value: torch.Tensor = None,
-        query_pos: torch.Tensor = None,
-        key_pos: torch.Tensor = None,
-        attn_masks: List[torch.Tensor] = None,
-        query_key_padding_mask: torch.Tensor = None,
-        key_padding_mask: torch.Tensor = None,
-        reference_points: torch.Tensor = None,
-        **kwargs,
+            self,
+            foreground_pre_layer: torch.Tensor,
+            score_tgt: torch.Tensor,
+            query: torch.Tensor,
+            key: torch.Tensor = None,
+            value: torch.Tensor = None,
+            query_pos: torch.Tensor = None,
+            key_pos: torch.Tensor = None,
+            attn_masks: List[torch.Tensor] = None,
+            query_key_padding_mask: torch.Tensor = None,
+            key_padding_mask: torch.Tensor = None,
+            reference_points: torch.Tensor = None,
+            **kwargs,
     ):
         """Forward function for `BaseTransformerLayer`.
         **kwargs contains the specific arguments of attentions.
@@ -301,6 +318,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
         attn_index = 0
         ffn_index = 0
         identity = query
+
         if attn_masks is None:
             attn_masks = [None for _ in range(self.num_attn)]
         elif isinstance(attn_masks, torch.Tensor):
@@ -313,6 +331,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                 f"to the number of attention in "
                 f"operation_order {self.num_attn}"
             )
+
         for layer in self.operation_order:
             if layer == "self_attn":
                 temp_key = temp_value = query
@@ -331,9 +350,11 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                 )
                 attn_index += 1
                 identity = query
+
             elif layer == "OESM":
+                # todo 这个是不是这个论文的
                 ori_tgt = query
-                mc_score=score_tgt.max(-1)[0]*foreground_pre_layer
+                mc_score = score_tgt.max(-1)[0] * foreground_pre_layer
                 select_tgt_index = torch.topk(mc_score, self.topk_sa, dim=1)[1]  # bs, nq
                 select_tgt = torch.gather(query, 1, select_tgt_index.unsqueeze(-1).repeat(1, 1, 256))
                 select_pos = torch.gather(query_pos, 1, select_tgt_index.unsqueeze(-1).repeat(1, 1, 256))
@@ -391,7 +412,8 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                 query = self.ffns[ffn_index](query, identity if self.pre_norm else None)
                 ffn_index += 1
         return query
-    
+
+
 class TransformerLayerSequence(nn.Module):
     """Base class for TransformerEncoder and TransformerDecoder, which will copy
     the passed `transformer_layers` module `num_layers` time or save the passed
@@ -408,9 +430,9 @@ class TransformerLayerSequence(nn.Module):
     """
 
     def __init__(
-        self,
-        transformer_layers=None,
-        num_layers=None,
+            self,
+            transformer_layers=None,
+            num_layers=None,
     ):
         super(TransformerLayerSequence, self).__init__()
         self.num_layers = num_layers

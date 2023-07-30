@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 
 
+# DETR中的多头Attention
 class MultiheadAttention(nn.Module):
     """A wrapper for ``torch.nn.MultiheadAttention``
 
@@ -43,13 +44,13 @@ class MultiheadAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        attn_drop: float = 0.0,
-        proj_drop: float = 0.0,
-        batch_first: bool = False,
-        **kwargs,
+            self,
+            embed_dim: int,
+            num_heads: int,
+            attn_drop: float = 0.0,
+            proj_drop: float = 0.0,
+            batch_first: bool = False,
+            **kwargs,
     ):
         super(MultiheadAttention, self).__init__()
         self.embed_dim = embed_dim
@@ -67,16 +68,16 @@ class MultiheadAttention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(
-        self,
-        query: torch.Tensor,
-        key: Optional[torch.Tensor] = None,
-        value: Optional[torch.Tensor] = None,
-        identity: Optional[torch.Tensor] = None,
-        query_pos: Optional[torch.Tensor] = None,
-        key_pos: Optional[torch.Tensor] = None,
-        attn_mask: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
-        **kwargs,
+            self,
+            query: torch.Tensor,
+            key: Optional[torch.Tensor] = None,
+            value: Optional[torch.Tensor] = None,
+            identity: Optional[torch.Tensor] = None,
+            query_pos: Optional[torch.Tensor] = None,
+            key_pos: Optional[torch.Tensor] = None,
+            attn_mask: Optional[torch.Tensor] = None,
+            key_padding_mask: Optional[torch.Tensor] = None,
+            **kwargs,
     ) -> torch.Tensor:
         """Forward function for `MultiheadAttention`
 
@@ -157,13 +158,13 @@ class ConditionalSelfAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        attn_drop=0.0,
-        proj_drop=0.0,
-        batch_first=False,
-        **kwargs,
+            self,
+            embed_dim,
+            num_heads,
+            attn_drop=0.0,
+            proj_drop=0.0,
+            batch_first=False,
+            **kwargs,
     ):
         super(ConditionalSelfAttention, self).__init__()
         self.query_content_proj = nn.Linear(embed_dim, embed_dim)
@@ -177,20 +178,20 @@ class ConditionalSelfAttention(nn.Module):
         self.num_heads = num_heads
         self.embed_dim = embed_dim
         head_dim = embed_dim // num_heads
-        self.scale = head_dim**-0.5
+        self.scale = head_dim ** -0.5
         self.batch_first = batch_first
 
     def forward(
-        self,
-        query,
-        key=None,
-        value=None,
-        identity=None,
-        query_pos=None,
-        key_pos=None,
-        attn_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key=None,
+            value=None,
+            identity=None,
+            query_pos=None,
+            key_pos=None,
+            attn_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
         """Forward function for `ConditionalSelfAttention`
 
@@ -238,7 +239,7 @@ class ConditionalSelfAttention(nn.Module):
                     )
 
         assert (
-            query_pos is not None and key_pos is not None
+                query_pos is not None and key_pos is not None
         ), "query_pos and key_pos must be passed into ConditionalAttention Module"
 
         # transpose (b n c) to (n b c) for attention calculation
@@ -311,13 +312,13 @@ class ConditionalCrossAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        attn_drop=0.0,
-        proj_drop=0.0,
-        batch_first=False,
-        **kwargs,
+            self,
+            embed_dim,
+            num_heads,
+            attn_drop=0.0,
+            proj_drop=0.0,
+            batch_first=False,
+            **kwargs,
     ):
         super(ConditionalCrossAttention, self).__init__()
         self.query_content_proj = nn.Linear(embed_dim, embed_dim)
@@ -333,18 +334,18 @@ class ConditionalCrossAttention(nn.Module):
         self.batch_first = batch_first
 
     def forward(
-        self,
-        query,
-        key=None,
-        value=None,
-        identity=None,
-        query_pos=None,
-        key_pos=None,
-        query_sine_embed=None,
-        is_first_layer=False,
-        attn_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key=None,
+            value=None,
+            identity=None,
+            query_pos=None,
+            key_pos=None,
+            query_sine_embed=None,
+            is_first_layer=False,
+            attn_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
         """Forward function for `ConditionalCrossAttention`
 
@@ -394,7 +395,7 @@ class ConditionalCrossAttention(nn.Module):
                     )
 
         assert (
-            query_pos is not None and key_pos is not None
+                query_pos is not None and key_pos is not None
         ), "query_pos and key_pos must be passed into ConditionalAttention Module"
 
         # transpose (b n c) to (n b c) for attention calculation

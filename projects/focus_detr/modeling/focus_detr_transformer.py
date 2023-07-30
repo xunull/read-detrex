@@ -48,6 +48,7 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
         super(FOCUS_DETRTransformerEncoder, self).__init__(
             transformer_layers=Focus_DETR_BaseTransformerLayer(
                 attn=[
+                    # 多了一个Attention
                     MultiheadAttention(
                         embed_dim=embed_dim,
                         num_heads=num_heads,
@@ -70,13 +71,16 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
                     ffn_drop=ffn_dropout,
                 ),
                 norm=nn.LayerNorm(embed_dim),
+
                 operation_order=("OESM", "encoder_cross_attn", "norm", "ffn", "norm"),
             ),
             num_layers=num_layers,
         )
+
         self.embed_dim = self.layers[0].embed_dim
         self.pre_norm = self.layers[0].pre_norm
         self.enhance_MCSP = None
+
         if post_norm:
             self.post_norm_layer = nn.LayerNorm(self.embed_dim)
         else:
@@ -98,10 +102,12 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
             key_padding_mask=None,
             **kwargs,
     ):
+
         B_, N_, S_, P_ = reference_points.shape
         ori_reference_points = reference_points
         ori_pos = query_pos
         output = query
+
         for layer_id, layer in enumerate(self.layers):
             # for layer in self.layers:
             query = torch.gather(output, 1, foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, output.size(-1)))
@@ -143,6 +149,7 @@ def _get_clones(module, N, layer_share=False):
         return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
+# 与DINO一样的Decoder
 class FOCUS_DETRTransformerDecoder(TransformerLayerSequence):
     def __init__(
             self,
@@ -282,10 +289,14 @@ class FOCUS_DETRTransformer(nn.Module):
         super(FOCUS_DETRTransformer, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
+
+        # todo 这几行是新的
         self.focus_rho = 0.5
+        # todo
         self.cascade_set = torch.Tensor([1.0, 0.8, 0.6, 0.6, 0.4, 0.2])
         self.alpha = nn.Parameter(data=torch.Tensor(3), requires_grad=True)
         self.alpha.data.uniform_(-0.3, 0.3)
+
         self.num_feature_levels = num_feature_levels
         self.two_stage_num_proposals = two_stage_num_proposals
         self.embed_dim = self.encoder.embed_dim
@@ -295,6 +306,7 @@ class FOCUS_DETRTransformer(nn.Module):
             self.tgt_embed = nn.Embedding(self.two_stage_num_proposals, self.embed_dim)
         self.enc_output = nn.Linear(self.embed_dim, self.embed_dim)
         self.enc_output_norm = nn.LayerNorm(self.embed_dim)
+        # todo
         self.enc_mask_predictor = MaskPredictor(self.embed_dim, self.embed_dim)
         self.init_weights()
 
@@ -306,48 +318,6 @@ class FOCUS_DETRTransformer(nn.Module):
             if isinstance(m, MultiScaleDeformableAttention):
                 m.init_weights()
         nn.init.normal_(self.level_embeds)
-
-    @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
-        """Get the reference points used in decoder.
-
-        Args:
-            spatial_shapes (Tensor): The shape of all
-                feature maps, has shape (num_level, 2).
-            valid_ratios (Tensor): The ratios of valid
-                points on the feature map, has shape
-                (bs, num_levels, 2)
-            device (obj:`device`): The device where
-                reference_points should be.
-
-        Returns:
-            Tensor: reference points used in decoder, has \
-                shape (bs, num_keys, num_levels, 2).
-        """
-        reference_points_list = []
-        for lvl, (H, W) in enumerate(spatial_shapes):
-            #  TODO  check this 0.5
-            ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, H - 0.5, H, dtype=torch.float32, device=device),
-                torch.linspace(0.5, W - 0.5, W, dtype=torch.float32, device=device),
-            )
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H)
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W)
-            ref = torch.stack((ref_x, ref_y), -1)
-            reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, 1)
-        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
-        return reference_points
-
-    def get_valid_ratio(self, mask):
-        """Get the valid ratios of feature maps of all levels."""
-        _, H, W = mask.shape
-        valid_H = torch.sum(~mask[:, :, 0], 1)
-        valid_W = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_h = valid_H.float() / H
-        valid_ratio_w = valid_W.float() / W
-        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
-        return valid_ratio
 
     def gen_encoder_output_proposals(self, memory, memory_padding_mask, spatial_shapes, process_output=True):
         """Make region proposals for each multi-scale features considering their shapes and padding masks,
@@ -391,12 +361,59 @@ class FOCUS_DETRTransformer(nn.Module):
         output_proposals = output_proposals.masked_fill(~output_proposals_valid, float('inf'))  # sigmoid(inf) = 1
 
         output_memory = memory
+
+        # 这个地方稍微有点不一样
         if process_output:
             output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
             output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
             output_memory = self.enc_output_norm(self.enc_output(output_memory))
         return output_memory, output_proposals, (~memory_padding_mask).sum(axis=-1)
 
+    @staticmethod
+    def get_reference_points(spatial_shapes, valid_ratios, device):
+        """
+        Deformable DETR的参考点
+        Get the reference points used in decoder.
+
+        Args:
+            spatial_shapes (Tensor): The shape of all
+                feature maps, has shape (num_level, 2).
+            valid_ratios (Tensor): The ratios of valid
+                points on the feature map, has shape
+                (bs, num_levels, 2)
+            device (obj:`device`): The device where
+                reference_points should be.
+
+        Returns:
+            Tensor: reference points used in decoder, has \
+                shape (bs, num_keys, num_levels, 2).
+        """
+        reference_points_list = []
+        for lvl, (H, W) in enumerate(spatial_shapes):
+            #  TODO  check this 0.5
+            ref_y, ref_x = torch.meshgrid(
+                torch.linspace(0.5, H - 0.5, H, dtype=torch.float32, device=device),
+                torch.linspace(0.5, W - 0.5, W, dtype=torch.float32, device=device),
+            )
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W)
+            ref = torch.stack((ref_x, ref_y), -1)
+            reference_points_list.append(ref)
+        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
+        return reference_points
+
+    def get_valid_ratio(self, mask):
+        """Get the valid ratios of feature maps of all levels."""
+        _, H, W = mask.shape
+        valid_H = torch.sum(~mask[:, :, 0], 1)
+        valid_W = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_h = valid_H.float() / H
+        valid_ratio_w = valid_W.float() / W
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        return valid_ratio
+
+    # 多的
     def upsamplelike(self, inputs):
         src, size = inputs
         return F.interpolate(src, size, mode='bilinear', align_corners=True)
@@ -417,6 +434,7 @@ class FOCUS_DETRTransformer(nn.Module):
         for lvl, (feat, mask, pos_embed) in enumerate(
                 zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
         ):
+
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
@@ -441,6 +459,9 @@ class FOCUS_DETRTransformer(nn.Module):
         reference_points = self.get_reference_points(
             spatial_shapes, valid_ratios, device=feat.device
         )
+        # 以上都是相同的
+
+        # 这里是新增的
         if self.focus_rho:
             backbone_output_memory, backbone_output_proposals, valid_token_nums = self.gen_encoder_output_proposals(
                 feat_flatten + lvl_pos_embed_flatten, mask_flatten, spatial_shapes,
@@ -500,17 +521,22 @@ class FOCUS_DETRTransformer(nn.Module):
             valid_ratios=valid_ratios,
             **kwargs,
         )
+
+        # 以下内容与DINO相同
+        # 多的返回值也没有使用
         output_memory, output_proposals, _ = self.gen_encoder_output_proposals(
             memory, mask_flatten, spatial_shapes
         )
         # output_memory: bs, num_tokens, c
         # output_proposals: bs, num_tokens, 4. unsigmoided.
+
         enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
         enc_outputs_coord_unact = (
                 self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
         )
         topk = self.two_stage_num_proposals
         topk_proposals = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1]
+
         # extract region proposal boxes
         topk_coords_unact = torch.gather(
             enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
@@ -520,6 +546,7 @@ class FOCUS_DETRTransformer(nn.Module):
         if query_embed[1] is not None:
             reference_points = torch.cat([query_embed[1].sigmoid(), reference_points], 1)
         init_reference_out = reference_points
+
         # extract region features
         target_unact = torch.gather(
             output_memory, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1])
@@ -554,6 +581,7 @@ class FOCUS_DETRTransformer(nn.Module):
             inter_references_out,
             target_unact,
             topk_coords_unact.sigmoid(),
+            # 多的返回值
             temp_backbone_mask_prediction,
         )
 

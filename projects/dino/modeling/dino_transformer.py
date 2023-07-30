@@ -89,6 +89,7 @@ class DINOTransformerEncoder(TransformerLayerSequence):
         **kwargs,
     ):
 
+        # 6层循环
         for layer in self.layers:
             query = layer(
                 query,
@@ -176,6 +177,7 @@ class DINOTransformerDecoder(TransformerLayerSequence):
         valid_ratios=None,
         **kwargs,
     ):
+
         output = query
         bs, num_queries, _ = output.size()
         if reference_points.dim() == 2:

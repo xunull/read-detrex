@@ -50,11 +50,11 @@ class BaseTransformerLayer(nn.Module):
     """
 
     def __init__(
-        self,
-        attn: List[nn.Module],
-        ffn: nn.Module,
-        norm: nn.Module,
-        operation_order: tuple = None,
+            self,
+            attn: List[nn.Module],
+            ffn: nn.Module,
+            norm: nn.Module,
+            operation_order: tuple = None,
     ):
         super(BaseTransformerLayer, self).__init__()
         assert set(operation_order).issubset({"self_attn", "norm", "cross_attn", "ffn"})
@@ -96,16 +96,16 @@ class BaseTransformerLayer(nn.Module):
             self.norms.append(copy.deepcopy(norm))
 
     def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor = None,
-        value: torch.Tensor = None,
-        query_pos: torch.Tensor = None,
-        key_pos: torch.Tensor = None,
-        attn_masks: List[torch.Tensor] = None,
-        query_key_padding_mask: torch.Tensor = None,
-        key_padding_mask: torch.Tensor = None,
-        **kwargs,
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor = None,
+            value: torch.Tensor = None,
+            query_pos: torch.Tensor = None,
+            key_pos: torch.Tensor = None,
+            attn_masks: List[torch.Tensor] = None,
+            query_key_padding_mask: torch.Tensor = None,
+            key_padding_mask: torch.Tensor = None,
+            **kwargs,
     ):
         """Forward function for `BaseTransformerLayer`.
 
@@ -192,6 +192,7 @@ class BaseTransformerLayer(nn.Module):
         return query
 
 
+# 需要继承实现forward方法
 class TransformerLayerSequence(nn.Module):
     """Base class for TransformerEncoder and TransformerDecoder, which will copy
     the passed `transformer_layers` module `num_layers` time or save the passed
@@ -208,9 +209,9 @@ class TransformerLayerSequence(nn.Module):
     """
 
     def __init__(
-        self,
-        transformer_layers=None,
-        num_layers=None,
+            self,
+            transformer_layers=None,
+            num_layers=None,
     ):
         super(TransformerLayerSequence, self).__init__()
         self.num_layers = num_layers
