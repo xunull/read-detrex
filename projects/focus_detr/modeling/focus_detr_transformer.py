@@ -91,6 +91,7 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
     def forward(
             self,
             backbone_mask_prediction,
+
             focus_token_nums,
             foreground_inds,
             reference_points,
@@ -140,10 +141,12 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
                 **kwargs,
             )
             outputs = []
-
+            # for的是bs
             for i in range(foreground_inds[layer_id].shape[0]):
+                # focus_token_nums限制取token的最大数量
                 outputs.append(output[i].scatter(0, foreground_inds[layer_id][i][:focus_token_nums[i]].unsqueeze(
                     -1).repeat(1, query.size(-1)), query[i][:focus_token_nums[i]]))
+
             output = torch.stack(outputs)
 
         if self.post_norm_layer is not None:

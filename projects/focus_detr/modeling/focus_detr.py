@@ -33,7 +33,7 @@ from detectron2.modeling import detector_postprocess
 from detectron2.structures import Boxes, ImageList, Instances
 
 
-# todo 在DINO基础上？
+
 # 基本上是DINO的结构
 class FOCUS_DETR(nn.Module):
     """Implement DAB-Deformable-DETR in `DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR
@@ -168,7 +168,7 @@ class FOCUS_DETR(nn.Module):
                 - dict["aux_outputs"]: Optional, only returned when auxilary losses are activated. It is a list of
                             dictionnaries containing the two above keys for each decoder layer.
         """
-        # pdb.set_trace()
+
         images = self.preprocess_image(batched_inputs)
         if self.training:
             batch_size, _, H, W = images.tensor.shape
