@@ -26,6 +26,7 @@ from detrex.utils import get_world_size, is_dist_avail_and_initialized
 from .two_stage_criterion import TwoStageCriterion
 
 
+# DINO的去噪部分
 class FOCUS_DETRCriterion(TwoStageCriterion):
     """This class computes the loss for DETR.
     The process happens in two steps:

@@ -35,10 +35,10 @@ def coords_fmap2orig(feature, stride):
     # 按步长
     shifts_x = torch.arange(0, w * stride, stride, dtype=torch.float32)
     shifts_y = torch.arange(0, h * stride, stride, dtype=torch.float32)
-    shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x) # 网格
+    shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)  # 网格
     # [h,w] -> hw
     shift_x = torch.reshape(shift_x, [-1])
-    shift_y = torch.reshape(shift_y, [-1]) # [h,w] -> hw
+    shift_y = torch.reshape(shift_y, [-1])  # [h,w] -> hw
     # 各个网格的中心坐标点
     coords = torch.stack([shift_x, shift_y], -1) + stride // 2
     return coords
@@ -70,13 +70,14 @@ class GenTargets(nn.Module):
         classes = batch_classes
         cls_targets_all_level = []
         assert len(self.strides) == len(cls_logits)
-        for level in range(len(cls_logits)):
+        for level in range(len(cls_logits)):  # 4个特征层
             level_out = cls_logits[level]
             level_targets = self._gen_level_targets(level_out, gt_boxes, classes, self.strides[level],
                                                     self.limit_range[level])
             cls_targets_all_level.append(level_targets)
         return torch.cat(cls_targets_all_level, dim=1)
 
+    # 公式1的作用
     def _gen_level_targets(self, out, gt_boxes, classes, stride, limit_range, sample_radiu_ratio=1.5):
         '''
         Args
@@ -203,6 +204,7 @@ def compute_cls_loss(preds, targets, mask):
     class_num = preds[0].shape[1]
     mask = mask.unsqueeze(dim=-1)
     # mask=targets>-1#[batch_size,sum(_h*_w),1]
+    # 做为最后的约束
     num_pos = torch.sum(mask, dim=[1, 2]).clamp_(min=1).float()  # [batch_size,] # 有意义的label的数量
 
     assert preds.shape[:2] == targets.shape[:2]

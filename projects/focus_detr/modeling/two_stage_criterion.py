@@ -48,6 +48,7 @@ class TwoStageCriterion(SetCriterion):
         # 公式6中的第三个系数
         weight_dict['select_loss'] = 1.5
 
+        # 用于计算公式1
         strides = [8, 16, 32, 64]
         limit_range = [[-1, 64], [64, 128], [128, 256], [256, 999999]]
         self.target_layer = GenTargets(strides, limit_range)
@@ -86,6 +87,7 @@ class TwoStageCriterion(SetCriterion):
                 n = labels[i].shape[0]
                 if n > max_num: max_num = n
             for i in range(batch_size):
+
                 # like tensor([[ 67.7415,   0.0000, 564.1989, 620.0000],
                 #         [389.9659, 320.0333, 532.6968, 620.0000],
                 #         [ -1.0000,  -1.0000,  -1.0000,  -1.0000],
@@ -100,11 +102,15 @@ class TwoStageCriterion(SetCriterion):
                 pad_classes_list.append(torch.nn.functional.pad(labels[i], (0, max_num - labels[i].shape[0]), value=-1))
             batch_classes = torch.stack(pad_classes_list)
             batch_boxes = torch.stack(pad_boxes_list)
+
+            # 以上都是对GT的box和label的处理
+
             # [bs,sum(hw),1]
-            # srcs是在哪放进去的 判断srcs中的token 应该属于哪一个class
+            # srcs是在哪放进去的 判断srcs中的token 是否是前景类
             class_targets = self.target_layer(outputs['srcs'], batch_boxes, batch_classes)
             # 大于0是有意义的class
             t_mask_pos = (class_targets > 0).squeeze(dim=-1)
+
         # 这里是前景分数 [bs,sum(hw),1]
         backbone_mask_prediction = outputs["temp_backbone_mask_prediction"]
         # 公式6中的第三个loss，使用Focal Loss计算

@@ -212,6 +212,7 @@ class BaseTransformerLayer(nn.Module):
         return query
 
 
+# Focus-DETR的Encoder，修改为支持Dual Attention
 class Focus_DETR_BaseTransformerLayer(nn.Module):
     # TODO: add more tutorials about BaseTransformerLayer
     """The implementation of Base `TransformerLayer` used in Transformer. Modified
@@ -389,7 +390,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
             elif layer == "encoder_cross_attn":
                 # 第二个attention，这个是Deformable Attention
                 # temp_key = temp_value = query
-                temp_key = temp_value = value # 这里用的是传入进来的value，算是cross attention
+                temp_key = temp_value = value  # 这里用的是传入进来的value，算是cross attention
                 query = self.attentions[attn_index](
                     query,
                     temp_key,
