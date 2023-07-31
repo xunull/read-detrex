@@ -28,6 +28,7 @@ import torch.nn as nn
 from detrex.layers.mlp import FFN
 
 
+# 与detrex中的基本一致，多了encoder_cross_attn的处理
 class BaseTransformerLayer(nn.Module):
     # TODO: add more tutorials about BaseTransformerLayer
     """The implementation of Base `TransformerLayer` used in Transformer. Modified
@@ -60,7 +61,7 @@ class BaseTransformerLayer(nn.Module):
         transformer中的attn网络，ffn网络，norm网络，传入进来
         """
         super(BaseTransformerLayer, self).__init__()
-        # 模型的执行顺序
+        # 模型的执行顺序, 比基础的多一个encoder_cross_attn
         assert set(operation_order).issubset({"self_attn", "encoder_cross_attn", "norm", "cross_attn", "ffn"})
 
         # count attention nums
@@ -82,6 +83,7 @@ class BaseTransformerLayer(nn.Module):
         index = 0
 
         for operation_name in operation_order:
+            # 多了一个encoder_cross_attn
             if operation_name in ["self_attn", "encoder_cross_attn", "cross_attn"]:
                 self.attentions.append(attn[index])
                 index += 1
@@ -240,7 +242,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
     ):
         super(Focus_DETR_BaseTransformerLayer, self).__init__()
 
-        # 相比于detrex的transformer 这个地方进行了修改为了适应这篇论文
+        # 相比于detrex的transformer 这个地方进行了修改为了适应这篇论文 "OESM", "encoder_cross_attn"
         assert set(operation_order).issubset({"self_attn", "OESM", "encoder_cross_attn", "norm", "cross_attn", "ffn"})
         self.topk_sa = 300
         # count attention nums
@@ -259,10 +261,12 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
         self.pre_norm = operation_order[0] == "norm"
         self.attentions = nn.ModuleList()
         index = 0
+
         for operation_name in operation_order:
             if operation_name in ["self_attn", "OESM", "encoder_cross_attn", "cross_attn"]:
                 self.attentions.append(attn[index])
                 index += 1
+
         self.embed_dim = self.attentions[0].embed_dim
         # count ffn nums
         self.ffns = nn.ModuleList()
@@ -278,7 +282,9 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
 
     def forward(
             self,
+            # 前景分数
             foreground_pre_layer: torch.Tensor,
+            # 每个token的class的分数
             score_tgt: torch.Tensor,
             query: torch.Tensor,
             key: torch.Tensor = None,
@@ -331,7 +337,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                 f"to the number of attention in "
                 f"operation_order {self.num_attn}"
             )
-
+        # ('OESM', 'encoder_cross_attn', 'norm', 'ffn', 'norm')
         for layer in self.operation_order:
             if layer == "self_attn":
                 temp_key = temp_value = query
@@ -352,13 +358,18 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                 identity = query
 
             elif layer == "OESM":
-                # todo 这个是不是这个论文的
+                # 第一个 attention
                 ori_tgt = query
+                # 最大的类别的分数和前景分数相乘
                 mc_score = score_tgt.max(-1)[0] * foreground_pre_layer
-                select_tgt_index = torch.topk(mc_score, self.topk_sa, dim=1)[1]  # bs, nq
+                # bs, nq # 最大的300个 位置index
+                select_tgt_index = torch.topk(mc_score, self.topk_sa, dim=1)[1]
+                # 取出对应的query
                 select_tgt = torch.gather(query, 1, select_tgt_index.unsqueeze(-1).repeat(1, 1, 256))
+                # 取出对应的query index
                 select_pos = torch.gather(query_pos, 1, select_tgt_index.unsqueeze(-1).repeat(1, 1, 256))
                 temp_key = temp_value = select_tgt
+                # 进行attention计算
                 tgt2 = self.attentions[attn_index](
                     select_tgt,
                     temp_key,
@@ -370,12 +381,15 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                     **kwargs,
                 )
                 tgt2 = self.norm2(tgt2)
+                # 更新query
                 query = ori_tgt.scatter(1, select_tgt_index.unsqueeze(-1).repeat(1, 1, tgt2.size(-1)), tgt2)
                 attn_index += 1
                 identity = query
+
             elif layer == "encoder_cross_attn":
+                # 第二个attention，这个是Deformable Attention
                 # temp_key = temp_value = query
-                temp_key = temp_value = value
+                temp_key = temp_value = value # 这里用的是传入进来的value，算是cross attention
                 query = self.attentions[attn_index](
                     query,
                     temp_key,
