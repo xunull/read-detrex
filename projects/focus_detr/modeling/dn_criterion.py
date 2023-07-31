@@ -1,8 +1,8 @@
-#Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
 
-#This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
+# This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
 
-#This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
 
 # coding=utf-8
 # Copyright 2022 The IDEA Authors. All rights reserved.
@@ -83,8 +83,8 @@ class FOCUS_DETRCriterion(TwoStageCriterion):
                     t = t.unsqueeze(0).repeat(dn_num, 1)
                     tgt_idx = t.flatten()
                     output_idx = (
-                        torch.tensor(range(dn_num)) * single_padding
-                    ).long().cuda().unsqueeze(1) + t
+                                         torch.tensor(range(dn_num)) * single_padding
+                                 ).long().cuda().unsqueeze(1) + t
                     output_idx = output_idx.flatten()
                 else:
                     output_idx = tgt_idx = torch.tensor([]).long().cuda()

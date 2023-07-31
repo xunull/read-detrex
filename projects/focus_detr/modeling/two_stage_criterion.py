@@ -1,8 +1,8 @@
-#Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
+# Copyright (C) 2023. Huawei Technologies Co., Ltd. All rights reserved.
 
-#This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
+# This program is free software; you can redistribute it and/or modify it under the terms of the MIT License.
 
-#This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the MIT License for more details.
 
 # coding=utf-8
 # Copyright 2022 The IDEA Authors. All rights reserved.
@@ -23,29 +23,35 @@ import torch
 from detrex.layers import box_cxcywh_to_xyxy
 from detrex.modeling.criterion import SetCriterion
 from detrex.utils import get_world_size, is_dist_avail_and_initialized
-from .foreground_supervision import GenTargets,compute_cls_loss
+from .foreground_supervision import GenTargets, compute_cls_loss
+
 
 class TwoStageCriterion(SetCriterion):
     def __init__(
-        self,
-        num_classes,
-        matcher,
-        weight_dict,
-        losses=["class", "boxes"],
-        eos_coef=None,
-        loss_class_type="focal_loss",
-        alpha: float = 0.25,
-        gamma: float = 2,
-        two_stage_binary_cls=False,
+            self,
+            num_classes,
+            matcher,
+            weight_dict,
+            losses=["class", "boxes"],
+            eos_coef=None,
+            loss_class_type="focal_loss",
+            alpha: float = 0.25,
+            gamma: float = 2,
+            two_stage_binary_cls=False,
     ):
         super().__init__(
             num_classes, matcher, weight_dict, losses, eos_coef, loss_class_type, alpha, gamma
         )
-        weight_dict['select_loss'] = 1.5
+
         self.two_stage_binary_cls = two_stage_binary_cls
+
+        # 公式6中的第三个系数
+        weight_dict['select_loss'] = 1.5
+
         strides = [8, 16, 32, 64]
         limit_range = [[-1, 64], [64, 128], [128, 256], [256, 999999]]
         self.target_layer = GenTargets(strides, limit_range)
+
     def forward(self, outputs, targets):
         """This performs the loss computation.
         Parameters:
@@ -67,29 +73,45 @@ class TwoStageCriterion(SetCriterion):
             for t in targets:
                 h, w = t['size']
                 boxes = t["boxes"]
+                # 恢复成原始大小
                 boxes = boxes * torch.tensor([w, h, w, h], dtype=torch.float32, device=boxes.device)
-                boxes = box_cxcywh_to_xyxy(boxes)
+                boxes = box_cxcywh_to_xyxy(boxes)  # 左上右下四个坐标值
                 temp_labels.append(t['labels'])
                 gt_boxx.append(boxes)
             for c in temp_labels:
                 c = torch.ones(c.shape, device=c.device)
-                labels.append(c)
-            max_num = 0
+                labels.append(c)  # 同等长度的，全是1
+            max_num = 0  # bs中最大的target数量
             for i in range(batch_size):
                 n = labels[i].shape[0]
                 if n > max_num: max_num = n
             for i in range(batch_size):
+                # like tensor([[ 67.7415,   0.0000, 564.1989, 620.0000],
+                #         [389.9659, 320.0333, 532.6968, 620.0000],
+                #         [ -1.0000,  -1.0000,  -1.0000,  -1.0000],
+                #         [ -1.0000,  -1.0000,  -1.0000,  -1.0000],
+                #         [ -1.0000,  -1.0000,  -1.0000,  -1.0000],
+                #         [ -1.0000,  -1.0000,  -1.0000,  -1.0000],
+                #         [ -1.0000,  -1.0000,  -1.0000,  -1.0000]], device='cuda:0')
+                # bs中统一成相同的大小，用-1补充
                 pad_boxes_list.append(
-                    torch.nn.functional.pad(gt_boxx[i], (0, 0, 0, max_num - gt_boxx[i].shape[0]), value=-1))
+                    torch.nn.functional.pad(gt_boxx[i], (0, 0, 0, max_num - gt_boxx[i].shape[0]),
+                                            value=-1))
                 pad_classes_list.append(torch.nn.functional.pad(labels[i], (0, max_num - labels[i].shape[0]), value=-1))
             batch_classes = torch.stack(pad_classes_list)
             batch_boxes = torch.stack(pad_boxes_list)
+            # [bs,sum(hw),1]
+            # srcs是在哪放进去的 判断srcs中的token 应该属于哪一个class
             class_targets = self.target_layer(outputs['srcs'], batch_boxes, batch_classes)
+            # 大于0是有意义的class
             t_mask_pos = (class_targets > 0).squeeze(dim=-1)
-        backbone_mask_prediction=outputs["temp_backbone_mask_prediction"]
+        # 这里是前景分数 [bs,sum(hw),1]
+        backbone_mask_prediction = outputs["temp_backbone_mask_prediction"]
+        # 公式6中的第三个loss，使用Focal Loss计算
         select_loss = compute_cls_loss(backbone_mask_prediction, class_targets, t_mask_pos).mean()
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
 
+        # 以下相同
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
@@ -107,10 +129,13 @@ class TwoStageCriterion(SetCriterion):
         for loss in self.losses:
             losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
 
-        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         t_l_dict = dict()
+        # 公式6 第三个loss
         t_l_dict['select_loss'] = select_loss
         losses.update(t_l_dict)
+
+        # 以下相同
+        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if "aux_outputs" in outputs:
             for i, aux_outputs in enumerate(outputs["aux_outputs"]):
                 indices = self.matcher(aux_outputs, targets)
