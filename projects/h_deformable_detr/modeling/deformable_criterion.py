@@ -27,15 +27,15 @@ class DeformableCriterion(SetCriterion):
     """
 
     def __init__(
-        self,
-        num_classes,
-        matcher,
-        weight_dict,
-        losses: List[str] = ["class", "boxes"],
-        eos_coef: float = 0.1,
-        loss_class_type: str = "focal_loss",
-        alpha: float = 0.25,
-        gamma: float = 2.0,
+            self,
+            num_classes,
+            matcher,
+            weight_dict,
+            losses: List[str] = ["class", "boxes"],
+            eos_coef: float = 0.1,
+            loss_class_type: str = "focal_loss",
+            alpha: float = 0.25,
+            gamma: float = 2.0,
     ):
         super(DeformableCriterion, self).__init__(
             num_classes=num_classes,

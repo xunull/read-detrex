@@ -29,15 +29,15 @@ from detrex.utils import inverse_sigmoid
 
 class HDeformableDetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        feedforward_dim: int = 1024,
-        attn_dropout: float = 0.1,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        post_norm: bool = False,
-        num_feature_levels: int = 4,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            feedforward_dim: int = 1024,
+            attn_dropout: float = 0.1,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            post_norm: bool = False,
+            num_feature_levels: int = 4,
     ):
         super(HDeformableDetrTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -69,16 +69,16 @@ class HDeformableDetrTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         for layer in self.layers:
@@ -100,16 +100,16 @@ class HDeformableDetrTransformerEncoder(TransformerLayerSequence):
 
 class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        feedforward_dim: int = 1024,
-        attn_dropout: float = 0.1,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        return_intermediate: bool = True,
-        num_feature_levels: int = 4,
-        look_forward_twice=True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            feedforward_dim: int = 1024,
+            attn_dropout: float = 0.1,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            return_intermediate: bool = True,
+            num_feature_levels: int = 4,
+            look_forward_twice=True,
     ):
         super(HDeformableDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -153,18 +153,18 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
         self.look_forward_twice = look_forward_twice
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        reference_points=None,
-        valid_ratios=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            reference_points=None,
+            valid_ratios=None,
+            **kwargs,
     ):
         output = query
 
@@ -173,8 +173,8 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
         for layer_idx, layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = (
-                    reference_points[:, :, None]
-                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                        reference_points[:, :, None]
+                        * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             else:
                 assert reference_points.shape[-1] == 2
@@ -230,13 +230,13 @@ class HDeformableDetrTransformer(nn.Module):
     """
 
     def __init__(
-        self,
-        encoder=None,
-        decoder=None,
-        num_feature_levels=4,
-        as_two_stage=False,
-        two_stage_num_proposals=300,
-        mixed_selection=True,
+            self,
+            encoder=None,
+            decoder=None,
+            num_feature_levels=4,
+            as_two_stage=False,
+            two_stage_num_proposals=300,
+            mixed_selection=True,
     ):
         super(HDeformableDetrTransformer, self).__init__()
         self.encoder = encoder
@@ -278,7 +278,7 @@ class HDeformableDetrTransformer(nn.Module):
         proposals = []
         _cur = 0
         for lvl, (H, W) in enumerate(spatial_shapes):
-            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H * W)].view(N, H, W, 1)
+            mask_flatten_ = memory_padding_mask[:, _cur: (_cur + H * W)].view(N, H, W, 1)
             valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
@@ -290,7 +290,7 @@ class HDeformableDetrTransformer(nn.Module):
 
             scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(N, -1, -1, -1) + 0.5) / scale
-            wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
+            wh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
             proposal = torch.cat((grid, wh), -1).view(N, -1, 4)
             proposals.append(proposal)
             _cur += H * W
@@ -367,13 +367,13 @@ class HDeformableDetrTransformer(nn.Module):
         return pos
 
     def forward(
-        self,
-        multi_level_feats,
-        multi_level_masks,
-        multi_level_pos_embeds,
-        query_embed,
-        self_attn_mask,
-        **kwargs,
+            self,
+            multi_level_feats,
+            multi_level_masks,
+            multi_level_pos_embeds,
+            query_embed,
+            self_attn_mask,
+            **kwargs,
     ):
         assert self.as_two_stage or query_embed is not None
 
@@ -382,7 +382,7 @@ class HDeformableDetrTransformer(nn.Module):
         lvl_pos_embed_flatten = []
         spatial_shapes = []
         for lvl, (feat, mask, pos_embed) in enumerate(
-            zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
+                zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
         ):
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
@@ -431,7 +431,7 @@ class HDeformableDetrTransformer(nn.Module):
 
             enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
             enc_outputs_coord_unact = (
-                self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
+                    self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
             )
 
             topk = self.two_stage_num_proposals

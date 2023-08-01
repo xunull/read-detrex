@@ -57,26 +57,26 @@ class HDeformableDETR(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone,
-        position_embedding,
-        neck,
-        transformer,
-        embed_dim,
-        num_classes,
-        num_queries_one2one,
-        num_queries_one2many,
-        criterion,
-        pixel_mean,
-        pixel_std,
-        aux_loss=True,
-        with_box_refine=False,
-        as_two_stage=False,
-        select_box_nums_for_evaluation=100,
-        device="cuda",
-        mixed_selection=True,
-        k_one2many=6,
-        lambda_one2many=1.0,
+            self,
+            backbone,
+            position_embedding,
+            neck,
+            transformer,
+            embed_dim,
+            num_classes,
+            num_queries_one2one,
+            num_queries_one2many,
+            criterion,
+            pixel_mean,
+            pixel_std,
+            aux_loss=True,
+            with_box_refine=False,
+            as_two_stage=False,
+            select_box_nums_for_evaluation=100,
+            device="cuda",
+            mixed_selection=True,
+            k_one2many=6,
+            lambda_one2many=1.0,
     ):
         super().__init__()
         num_queries = num_queries_one2one + num_queries_one2many
@@ -198,7 +198,7 @@ class HDeformableDETR(nn.Module):
         # initialize object query embeddings
         query_embeds = None
         if not self.as_two_stage or self.mixed_selection:
-            query_embeds = self.query_embedding.weight[0 : self.num_queries, :]
+            query_embeds = self.query_embedding.weight[0: self.num_queries, :]
 
         # make attn mask
         """ attention mask to prevent information leakage
@@ -214,12 +214,12 @@ class HDeformableDETR(nn.Module):
             .to(feat.device)
         )
         self_attn_mask[
-            self.num_queries_one2one :,
-            0 : self.num_queries_one2one,
+        self.num_queries_one2one:,
+        0: self.num_queries_one2one,
         ] = True
         self_attn_mask[
-            0 : self.num_queries_one2one,
-            self.num_queries_one2one :,
+        0: self.num_queries_one2one,
+        self.num_queries_one2one:,
         ] = True
 
         (
@@ -255,10 +255,10 @@ class HDeformableDETR(nn.Module):
                 assert reference.shape[-1] == 2
                 tmp[..., :2] += reference
             outputs_coord = tmp.sigmoid()
-            outputs_classes_one2one.append(outputs_class[:, 0 : self.num_queries_one2one])
-            outputs_classes_one2many.append(outputs_class[:, self.num_queries_one2one :])
-            outputs_coords_one2one.append(outputs_coord[:, 0 : self.num_queries_one2one])
-            outputs_coords_one2many.append(outputs_coord[:, self.num_queries_one2one :])
+            outputs_classes_one2one.append(outputs_class[:, 0: self.num_queries_one2one])
+            outputs_classes_one2many.append(outputs_class[:, self.num_queries_one2one:])
+            outputs_coords_one2one.append(outputs_coord[:, 0: self.num_queries_one2one])
+            outputs_coords_one2many.append(outputs_coord[:, self.num_queries_one2one:])
         outputs_classes_one2one = torch.stack(outputs_classes_one2one)
         # tensor shape: [num_decoder_layers, bs, num_queries_one2one, num_classes]
         outputs_coords_one2one = torch.stack(outputs_coords_one2one)
@@ -319,7 +319,7 @@ class HDeformableDETR(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -391,8 +391,8 @@ class HDeformableDETR(nn.Module):
         boxes = torch.gather(box_pred, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         for (
-            i,
-            (scores_per_image, labels_per_image, box_pred_per_image, image_size),
+                i,
+                (scores_per_image, labels_per_image, box_pred_per_image, image_size),
         ) in enumerate(zip(scores, labels, boxes, image_sizes)):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))
