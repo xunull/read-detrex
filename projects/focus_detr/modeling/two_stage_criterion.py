@@ -71,6 +71,7 @@ class TwoStageCriterion(SetCriterion):
             pad_classes90_list = []
             pad_boxes_list = []
             labels = []
+
             for t in targets:
                 h, w = t['size']
                 boxes = t["boxes"]
@@ -79,13 +80,16 @@ class TwoStageCriterion(SetCriterion):
                 boxes = box_cxcywh_to_xyxy(boxes)  # 左上右下四个坐标值
                 temp_labels.append(t['labels'])
                 gt_boxx.append(boxes)
+
             for c in temp_labels:
                 c = torch.ones(c.shape, device=c.device)
                 labels.append(c)  # 同等长度的，全是1
+
             max_num = 0  # bs中最大的target数量
             for i in range(batch_size):
                 n = labels[i].shape[0]
                 if n > max_num: max_num = n
+
             for i in range(batch_size):
 
                 # like tensor([[ 67.7415,   0.0000, 564.1989, 620.0000],
@@ -106,9 +110,9 @@ class TwoStageCriterion(SetCriterion):
             # 以上都是对GT的box和label的处理
 
             # [bs,sum(hw),1]
-            # srcs是在哪放进去的 判断srcs中的token 是否是前景类
+            # 判断srcs中的token 是否是前景类
             class_targets = self.target_layer(outputs['srcs'], batch_boxes, batch_classes)
-            # 大于0是有意义的class
+            # 大于0是有意义的class 只有0 1
             t_mask_pos = (class_targets > 0).squeeze(dim=-1)
 
         # 这里是前景分数 [bs,sum(hw),1]

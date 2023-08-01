@@ -33,7 +33,6 @@ from detectron2.modeling import detector_postprocess
 from detectron2.structures import Boxes, ImageList, Instances
 
 
-
 # 基本上是DINO的结构
 class FOCUS_DETR(nn.Module):
     """Implement DAB-Deformable-DETR in `DAB-DETR: Dynamic Anchor Boxes are Better Queries for DETR
@@ -102,7 +101,6 @@ class FOCUS_DETR(nn.Module):
         self.aux_loss = aux_loss
         self.criterion = criterion
 
-        # todo
         # denoising
         self.label_enc = nn.Embedding(num_classes, embed_dim)
         self.dn_number = dn_number
@@ -130,12 +128,18 @@ class FOCUS_DETR(nn.Module):
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = transformer.decoder.num_layers + 1
         self.class_embed = nn.ModuleList([copy.deepcopy(self.class_embed) for i in range(num_pred)])
+
+        # 每一个encoder都有一个MCSP
         self.enhance_MCSP_layerlist = nn.ModuleList(
             [self.class_embed[transformer.encoder.num_layers] for i in range(transformer.encoder.num_layers)])
+
         self.bbox_embed = nn.ModuleList([copy.deepcopy(self.bbox_embed) for i in range(num_pred)])
         nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
         # two-stage
+
+        # Multi-category score predictor
         self.transformer.encoder.enhance_MCSP = self.enhance_MCSP_layerlist
+
         self.transformer.decoder.class_embed = self.class_embed
         self.transformer.decoder.bbox_embed = self.bbox_embed
         # hack implementation for two-stage
@@ -185,6 +189,7 @@ class FOCUS_DETR(nn.Module):
 
         # project backbone features to the reuired dimension of transformer
         # we use multi-scale features in DINO
+        # backbone的特征转换为token的形式，并且多一层特征
         multi_level_feats = self.neck(features)
         multi_level_masks = []
         multi_level_position_embeddings = []
@@ -269,12 +274,17 @@ class FOCUS_DETR(nn.Module):
         output = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}
         if self.aux_loss:
             output["aux_outputs"] = self._set_aux_loss(outputs_class, outputs_coord)
+
         output["temp_backbone_mask_prediction"] = temp_backbone_mask_prediction
+
+        # 给后面的criterion使用的，这是原始的token
         output["srcs"] = multi_level_feats
+
         # prepare two stage output
         interm_coord = enc_reference
         interm_class = self.transformer.decoder.class_embed[-1](enc_state)
         output["enc_outputs"] = {"pred_logits": interm_class, "pred_boxes": interm_coord}
+
         if self.training:
             loss_dict = self.criterion(output, targets, dn_meta)
             weight_dict = self.criterion.weight_dict

@@ -340,7 +340,10 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
             )
         # ('OESM', 'encoder_cross_attn', 'norm', 'ffn', 'norm')
         for layer in self.operation_order:
+
+            # encoder中没有self_attn了
             if layer == "self_attn":
+
                 temp_key = temp_value = query
                 # temp_key = temp_value = value
                 query = self.attentions[attn_index](
