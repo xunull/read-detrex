@@ -53,13 +53,13 @@ class Trainer(SimpleTrainer):
     """
 
     def __init__(
-        self,
-        model,
-        dataloader,
-        optimizer,
-        amp=False,
-        clip_grad_params=None,
-        grad_scaler=None,
+            self,
+            model,
+            dataloader,
+            optimizer,
+            amp=False,
+            clip_grad_params=None,
+            grad_scaler=None,
     ):
         super().__init__(model=model, data_loader=dataloader, optimizer=optimizer)
 
@@ -177,8 +177,8 @@ def do_train(args, cfg):
                 p
                 for n, p in model.named_parameters()
                 if not match_name_keywords(n, ["backbone"])
-                and not match_name_keywords(n, ["reference_points", "sampling_offsets"])
-                and p.requires_grad
+                   and not match_name_keywords(n, ["reference_points", "sampling_offsets"])
+                   and p.requires_grad
             ],
             "lr": 2e-4,
         },
@@ -195,7 +195,7 @@ def do_train(args, cfg):
                 p
                 for n, p in model.named_parameters()
                 if match_name_keywords(n, ["reference_points", "sampling_offsets"])
-                and p.requires_grad
+                   and p.requires_grad
             ],
             "lr": 2e-5,
         },

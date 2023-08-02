@@ -21,6 +21,7 @@ from detrex.modeling import SetCriterion
 from detrex.utils import get_world_size, is_dist_avail_and_initialized
 
 
+# 与Deformable DETR相同
 class DeformableCriterion(SetCriterion):
     """This class computes the loss for Deformable-DETR
     and two-stage Deformable-DETR

@@ -57,22 +57,22 @@ class DeformableDETR(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone,
-        position_embedding,
-        neck,
-        transformer,
-        embed_dim,
-        num_classes,
-        num_queries,
-        criterion,
-        pixel_mean,
-        pixel_std,
-        aux_loss=True,
-        with_box_refine=False,
-        as_two_stage=False,
-        select_box_nums_for_evaluation=100,
-        device="cuda",
+            self,
+            backbone,
+            position_embedding,
+            neck,
+            transformer,
+            embed_dim,
+            num_classes,
+            num_queries,
+            criterion,
+            pixel_mean,
+            pixel_std,
+            aux_loss=True,
+            with_box_refine=False,
+            as_two_stage=False,
+            select_box_nums_for_evaluation=100,
+            device="cuda",
     ):
         super().__init__()
         # define backbone and position embedding module
@@ -244,7 +244,7 @@ class DeformableDETR(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -290,7 +290,7 @@ class DeformableDETR(nn.Module):
         boxes = torch.gather(box_pred, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         for i, (scores_per_image, labels_per_image, box_pred_per_image, image_size) in enumerate(
-            zip(scores, labels, boxes, image_sizes)
+                zip(scores, labels, boxes, image_sizes)
         ):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))

@@ -102,8 +102,11 @@ model = L(HDeformableDETR)(
     pixel_std=[58.395, 57.120, 57.375],
     select_box_nums_for_evaluation=300,
     device="cuda",
+    # todo
     mixed_selection=True,
+    # todo
     k_one2many=6,
+    # todo
     lambda_one2many=1.0,
 )
 
