@@ -215,8 +215,11 @@ class HDeformableDETR(nn.Module):
         # make attn mask
         """ attention mask to prevent information leakage
         """
+        # [1800, 1800]
         self_attn_mask = (torch.zeros([self.num_queries, self.num_queries, ]).bool().to(feat.device))
+        # 多的1500看不到前面的300
         self_attn_mask[self.num_queries_one2one:, 0: self.num_queries_one2one, ] = True
+        # 300看不到后面的1500
         self_attn_mask[0: self.num_queries_one2one, self.num_queries_one2one:, ] = True
 
         # 调用transformer
@@ -307,6 +310,7 @@ class HDeformableDETR(nn.Module):
                     targets,
                     self.k_one2many,
                     self.criterion,
+                    # 计算loss时 one2many的系数
                     self.lambda_one2many,
                 )
             else:
@@ -342,14 +346,23 @@ class HDeformableDETR(nn.Module):
 
     # 新增的方法
     def train_hybrid(self, outputs, targets, k_one2many, criterion, lambda_one2many):
+        """
+        k_one2many GT的组数
+        lambda_one2many one2many的loss的系数
+        """
         # one-to-one-loss
         loss_dict = criterion(outputs, targets)
+
         multi_targets = copy.deepcopy(targets)
+        # for in bs
         # repeat the targets
         for target in multi_targets:
+            # 重复k次
             target["boxes"] = target["boxes"].repeat(k_one2many, 1)
+            # 重复k次
             target["labels"] = target["labels"].repeat(k_one2many)
 
+        # 取出one2many相关的输出
         outputs_one2many = dict()
         outputs_one2many["pred_logits"] = outputs["pred_logits_one2many"]
         outputs_one2many["pred_boxes"] = outputs["pred_boxes_one2many"]
@@ -357,6 +370,7 @@ class HDeformableDETR(nn.Module):
 
         # one-to-many loss
         loss_dict_one2many = criterion(outputs_one2many, multi_targets)
+        # 更新到loss_dict中
         for key, value in loss_dict_one2many.items():
             if key + "_one2many" in loss_dict.keys():
                 loss_dict[key + "_one2many"] += value * lambda_one2many
@@ -364,6 +378,7 @@ class HDeformableDETR(nn.Module):
                 loss_dict[key + "_one2many"] = value * lambda_one2many
         return loss_dict
 
+    # 无修改
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
