@@ -162,7 +162,8 @@ class HDeformableDETR(nn.Module):
         pixel_mean = torch.Tensor(pixel_mean).to(self.device).view(3, 1, 1)
         pixel_std = torch.Tensor(pixel_std).to(self.device).view(3, 1, 1)
         self.normalizer = lambda x: (x - pixel_mean) / pixel_std
-        # todo
+
+        # H-DETR的参数
         self.num_queries_one2one = num_queries_one2one
         self.mixed_selection = mixed_selection
         self.k_one2many = k_one2many
@@ -181,11 +182,13 @@ class HDeformableDETR(nn.Module):
         else:
             batch_size, _, H, W = images.tensor.shape
             img_masks = images.tensor.new_zeros(batch_size, H, W)
+
             # todo
             # disable the one-to-many branch queries
             # save them frist
             save_num_queries = self.num_queries
             save_two_stage_num_proposals = self.transformer.two_stage_num_proposals
+            # 推理时，只使用one2one的query数量
             self.num_queries = self.num_queries_one2one
             self.transformer.two_stage_num_proposals = self.num_queries
 
@@ -212,25 +215,11 @@ class HDeformableDETR(nn.Module):
         # make attn mask
         """ attention mask to prevent information leakage
         """
-        self_attn_mask = (
-            torch.zeros(
-                [
-                    self.num_queries,
-                    self.num_queries,
-                ]
-            )
-            .bool()
-            .to(feat.device)
-        )
-        self_attn_mask[
-        self.num_queries_one2one:,
-        0: self.num_queries_one2one,
-        ] = True
-        self_attn_mask[
-        0: self.num_queries_one2one,
-        self.num_queries_one2one:,
-        ] = True
+        self_attn_mask = (torch.zeros([self.num_queries, self.num_queries, ]).bool().to(feat.device))
+        self_attn_mask[self.num_queries_one2one:, 0: self.num_queries_one2one, ] = True
+        self_attn_mask[0: self.num_queries_one2one, self.num_queries_one2one:, ] = True
 
+        # 调用transformer
         (
             inter_states,
             init_reference,
@@ -265,12 +254,17 @@ class HDeformableDETR(nn.Module):
             else:
                 assert reference.shape[-1] == 2
                 tmp[..., :2] += reference
-            outputs_coord = tmp.sigmoid()
 
+            outputs_coord = tmp.sigmoid()
+            # 输出值前面的是one2one
             outputs_classes_one2one.append(outputs_class[:, 0: self.num_queries_one2one])
+            # 输出值后面的是one2many
             outputs_classes_one2many.append(outputs_class[:, self.num_queries_one2one:])
+            # 输出值前面的是one2one
             outputs_coords_one2one.append(outputs_coord[:, 0: self.num_queries_one2one])
+            # 输出值后面的是one2many
             outputs_coords_one2many.append(outputs_coord[:, self.num_queries_one2one:])
+
         outputs_classes_one2one = torch.stack(outputs_classes_one2one)
         # tensor shape: [num_decoder_layers, bs, num_queries_one2one, num_classes]
         outputs_coords_one2one = torch.stack(outputs_coords_one2one)
@@ -288,6 +282,7 @@ class HDeformableDETR(nn.Module):
             "pred_logits_one2many": outputs_classes_one2many[-1],
             "pred_boxes_one2many": outputs_coords_one2many[-1],
         }
+
         if self.aux_loss:
             output["aux_outputs"] = self._set_aux_loss(
                 outputs_classes_one2one, outputs_coords_one2one
@@ -316,10 +311,12 @@ class HDeformableDETR(nn.Module):
                 )
             else:
                 loss_dict = self.criterion(output, targets)
+
             weight_dict = self.criterion.weight_dict
             new_dict = dict()
             for key, value in weight_dict.items():
                 new_dict[key] = value
+                # 权重dict上补充上one2many的权重
                 new_dict[key + "_one2many"] = value
             weight_dict = new_dict
             for k in loss_dict.keys():
@@ -343,7 +340,7 @@ class HDeformableDETR(nn.Module):
             self.transformer.two_stage_num_proposals = save_two_stage_num_proposals
             return processed_results
 
-    # todo
+    # 新增的方法
     def train_hybrid(self, outputs, targets, k_one2many, criterion, lambda_one2many):
         # one-to-one-loss
         loss_dict = criterion(outputs, targets)
@@ -377,6 +374,7 @@ class HDeformableDETR(nn.Module):
             for a, b in zip(outputs_class[:-1], outputs_coord[:-1])
         ]
 
+    # 无修改
     def inference(self, box_cls, box_pred, image_sizes):
         """
         Arguments:
@@ -416,6 +414,7 @@ class HDeformableDETR(nn.Module):
             results.append(result)
         return results
 
+    # 无修改
     def prepare_targets(self, targets):
         new_targets = []
         for targets_per_image in targets:
@@ -427,6 +426,7 @@ class HDeformableDETR(nn.Module):
             new_targets.append({"labels": gt_classes, "boxes": gt_boxes})
         return new_targets
 
+    # 无修改
     def preprocess_image(self, batched_inputs):
         images = [self.normalizer(x["image"].to(self.device)) for x in batched_inputs]
         images = ImageList.from_tensors(images)

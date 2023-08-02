@@ -27,6 +27,8 @@ from detrex.layers import (
 from detrex.utils import inverse_sigmoid
 
 
+# Encoder
+# 与Deformable DETR相同
 class HDeformableDetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
             self,
@@ -98,6 +100,8 @@ class HDeformableDetrTransformerEncoder(TransformerLayerSequence):
         return query
 
 
+# Decoder
+# 比Deformable DETR多了一个look_forward_twice的判断
 class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
             self,
@@ -135,14 +139,7 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
                     ffn_drop=ffn_dropout,
                 ),
                 norm=nn.LayerNorm(embed_dim),
-                operation_order=(
-                    "self_attn",
-                    "norm",
-                    "cross_attn",
-                    "norm",
-                    "ffn",
-                    "norm",
-                ),
+                operation_order=("self_attn", "norm", "cross_attn", "norm", "ffn", "norm"),
             ),
             num_layers=num_layers,
         )
@@ -207,6 +204,7 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
 
             if self.return_intermediate:
                 intermediate.append(output)
+                # todo
                 # 多的改动 look_forward_twice
                 intermediate_reference_points.append(
                     new_reference_points if self.look_forward_twice else reference_points
@@ -218,6 +216,8 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
         return output, reference_points
 
 
+# Transformer
+# 多了一个Mixed Query Selection (MQS)
 class HDeformableDetrTransformer(nn.Module):
     """Transformer module for Deformable DETR
 
@@ -448,6 +448,7 @@ class HDeformableDetrTransformer(nn.Module):
             pos_trans_out = self.pos_trans_norm(
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact))
             )
+
             # todo
             if not self.mixed_selection:
                 query_pos, query = torch.split(pos_trans_out, c, dim=2)
