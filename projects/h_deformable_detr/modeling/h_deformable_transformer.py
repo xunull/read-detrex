@@ -207,6 +207,7 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
 
             if self.return_intermediate:
                 intermediate.append(output)
+                # 多的改动 look_forward_twice
                 intermediate_reference_points.append(
                     new_reference_points if self.look_forward_twice else reference_points
                 )
@@ -236,6 +237,7 @@ class HDeformableDetrTransformer(nn.Module):
             num_feature_levels=4,
             as_two_stage=False,
             two_stage_num_proposals=300,
+            # todo
             mixed_selection=True,
     ):
         super(HDeformableDetrTransformer, self).__init__()
@@ -372,6 +374,7 @@ class HDeformableDetrTransformer(nn.Module):
             multi_level_masks,
             multi_level_pos_embeds,
             query_embed,
+            # todo
             self_attn_mask,
             **kwargs,
     ):
@@ -445,9 +448,11 @@ class HDeformableDetrTransformer(nn.Module):
             pos_trans_out = self.pos_trans_norm(
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact))
             )
+            # todo
             if not self.mixed_selection:
                 query_pos, query = torch.split(pos_trans_out, c, dim=2)
             else:
+                # todo
                 # query_pos here is the content embed for deformable DETR
                 query = query_embed.unsqueeze(0).expand(bs, -1, -1)
                 query_pos, _ = torch.split(pos_trans_out, c, dim=2)
