@@ -205,6 +205,8 @@ def do_train(args, cfg):
     logger.info("Model:\n{}".format(model))
     model.to(cfg.train.device)
 
+    print(model)
+
     # instantiate optimizer
     cfg.optimizer.params.model = model
     optim = instantiate(cfg.optimizer)

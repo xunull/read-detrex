@@ -77,7 +77,9 @@ class HDeformableDETR(nn.Module):
             device="cuda",
             # 多的参数
             mixed_selection=True,
+            # 重复GT的次数
             k_one2many=6,
+            # one-to-many loss的系数
             lambda_one2many=1.0,
     ):
         super().__init__()
