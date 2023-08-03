@@ -31,16 +31,16 @@ from detrex.utils import inverse_sigmoid
 
 class DabDetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.1,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.1,
-        activation: nn.Module = nn.PReLU(),
-        post_norm: bool = False,
-        num_layers: int = 6,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.1,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.1,
+            activation: nn.Module = nn.PReLU(),
+            post_norm: bool = False,
+            num_layers: int = 6,
+            batch_first: bool = False,
     ):
         super(DabDetrTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -71,16 +71,16 @@ class DabDetrTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         for layer in self.layers:
@@ -103,18 +103,18 @@ class DabDetrTransformerEncoder(TransformerLayerSequence):
 
 class DabDetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.0,
-        activation: nn.Module = nn.PReLU(),
-        num_layers: int = None,
-        modulate_hw_attn: bool = True,
-        batch_first: bool = False,
-        post_norm: bool = True,
-        return_intermediate: bool = True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.0,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.0,
+            activation: nn.Module = nn.PReLU(),
+            num_layers: int = None,
+            modulate_hw_attn: bool = True,
+            batch_first: bool = False,
+            post_norm: bool = True,
+            return_intermediate: bool = True,
     ):
         super(DabDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -165,17 +165,17 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
             self.layers[idx + 1].attentions[1].query_pos_proj = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        anchor_box_embed=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            anchor_box_embed=None,
+            **kwargs,
     ):
         intermediate = []
 
@@ -198,11 +198,11 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
 
             if self.modulate_hw_attn:
                 ref_hw_cond = self.ref_anchor_head(query).sigmoid()
-                query_sine_embed[..., self.embed_dim // 2 :] *= (
-                    ref_hw_cond[..., 0] / obj_center[..., 2]
+                query_sine_embed[..., self.embed_dim // 2:] *= (
+                        ref_hw_cond[..., 0] / obj_center[..., 2]
                 ).unsqueeze(-1)
                 query_sine_embed[..., : self.embed_dim // 2] *= (
-                    ref_hw_cond[..., 1] / obj_center[..., 3]
+                        ref_hw_cond[..., 1] / obj_center[..., 3]
                 ).unsqueeze(-1)
 
             query = layer(
@@ -291,7 +291,6 @@ class DabDetrTransformer(nn.Module):
             query_key_padding_mask=mask,
         )
         num_queries = anchor_box_embed.shape[0]
-
 
         if self.num_patterns == 0:
             target = torch.zeros(num_queries, bs, self.embed_dim, device=anchor_box_embed.device)

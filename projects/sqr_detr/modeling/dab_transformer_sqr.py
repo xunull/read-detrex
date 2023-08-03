@@ -30,6 +30,8 @@ from detrex.layers import (
 from detrex.utils import inverse_sigmoid
 
 
+# SQR 修改了Decoder
+
 class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
     def __init__(
             self,
@@ -92,7 +94,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
 
         for idx in range(num_layers - 1):
             self.layers[idx + 1].attentions[1].query_pos_proj = None
-
+        # SQR code
         self.start_q = [0, 0, 1, 2, 4, 7, 12]
         self.end_q = [1, 2, 4, 7, 12, 20, 33]
 
@@ -112,6 +114,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
         train_mode = anchor_box_embed.requires_grad
 
         if train_mode:
+            # SQR线路
             result = self.forward_sqr_train(query,
                                             key,
                                             value,
@@ -124,6 +127,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                                             **kwargs,
                                             )
         else:
+            # 正常的推理线路
             result = self.forward_regular(query,
                                           key,
                                           value,
@@ -150,30 +154,42 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
             anchor_box_embed=None,
             **kwargs,
     ):
+
         batchsize = key.shape[1]
 
         intermediate = []
         intermediate_ref_boxes = []
         reference_boxes = anchor_box_embed.sigmoid()
 
+
         query_list_reserve = [query]  # fangyi
         reference_boxes_list_reserve = [reference_boxes]  # fangyi
 
         for idx, layer in enumerate(self.layers):
+
             start_q = self.start_q[idx]
             end_q = self.end_q[idx]
+
+            # 1 2 3 5 8 13
+            # 取出query (select recollection)
             query_list = query_list_reserve.copy()[start_q:end_q]
             reference_boxes_list = reference_boxes_list_reserve.copy()[start_q:end_q]
 
+            # 取出之后cat
             query = torch.cat(query_list, dim=1)
             reference_boxes = torch.cat(reference_boxes_list, dim=1)
 
+            # 1 2 3 5 8 13
             fakesetsize = int(query.shape[1] / batchsize)
+
+            # k v key_pos 进行repeat
             k_ = key.repeat(1, fakesetsize, 1)
             v_ = value.repeat(1, fakesetsize, 1)
             key_pos_ = key_pos.repeat(1, fakesetsize, 1)
 
+            # 以下与DAB-DETR相同
             intermediate_ref_boxes.append(reference_boxes)
+
             if idx != 0:
                 reference_boxes = reference_boxes.detach()
 
@@ -198,6 +214,12 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                         ref_hw_cond[..., 1] / obj_center[..., 3]
                 ).unsqueeze(-1)
 
+            # [300,3,256]
+            # [300,6,256]
+            # [300,9,256]
+            # [300,15,256]
+            # [300,24,256]
+            # [300,39,256]
             query = layer(
                 query,
                 k_,
@@ -225,6 +247,8 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                 else:
                     intermediate.append(query)
 
+            # --------------------------- 以上相同
+
             query_list_reserve.extend([_ for _ in torch.split(query, batchsize, dim=1)])
             reference_boxes_list_reserve.extend([_ for _ in torch.split(reference_boxes, batchsize, dim=1)])
 
@@ -234,6 +258,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                 intermediate.pop()
                 intermediate.append(query)
 
+        # b=[i for s in a for i in s]
         intermediate = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate] for i in s]
         intermediate_ref_boxes = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate_ref_boxes]
                                   for i in s]
@@ -265,6 +290,9 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
             anchor_box_embed=None,
             **kwargs,
     ):
+
+        # 与DAB-DETR 基本相同
+
         intermediate = []
         intermediate_ref_boxes = []
         reference_boxes = anchor_box_embed.sigmoid()
