@@ -6,11 +6,14 @@ from detrex.modeling.backbone import ResNet, BasicStem
 
 from detectron2.config import LazyCall as L
 
+# 主体是DAB-DETR
 from projects.dab_detr.modeling import (
     DABDETR,
     DabDetrTransformer,
     DabDetrTransformerEncoder,
 )
+
+# 修改了Decoder
 from projects.sqr_detr.modeling import (
     DabDetrTransformerDecoder_qr,
 )

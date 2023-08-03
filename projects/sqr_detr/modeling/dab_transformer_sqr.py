@@ -32,18 +32,18 @@ from detrex.utils import inverse_sigmoid
 
 class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.0,
-        activation: nn.Module = nn.PReLU(),
-        num_layers: int = None,
-        modulate_hw_attn: bool = True,
-        batch_first: bool = False,
-        post_norm: bool = True,
-        return_intermediate: bool = True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.0,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.0,
+            activation: nn.Module = nn.PReLU(),
+            num_layers: int = None,
+            modulate_hw_attn: bool = True,
+            batch_first: bool = False,
+            post_norm: bool = True,
+            return_intermediate: bool = True,
     ):
         super(DabDetrTransformerDecoder_qr, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -97,17 +97,17 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
         self.end_q = [1, 2, 4, 7, 12, 20, 33]
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        anchor_box_embed=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            anchor_box_embed=None,
+            **kwargs,
     ):
         train_mode = anchor_box_embed.requires_grad
 
@@ -138,17 +138,17 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
         return result
 
     def forward_sqr_train(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        anchor_box_embed=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            anchor_box_embed=None,
+            **kwargs,
     ):
         batchsize = key.shape[1]
 
@@ -169,10 +169,9 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
             reference_boxes = torch.cat(reference_boxes_list, dim=1)
 
             fakesetsize = int(query.shape[1] / batchsize)
-            k_ = key.repeat(1,fakesetsize, 1)
+            k_ = key.repeat(1, fakesetsize, 1)
             v_ = value.repeat(1, fakesetsize, 1)
             key_pos_ = key_pos.repeat(1, fakesetsize, 1)
-
 
             intermediate_ref_boxes.append(reference_boxes)
             if idx != 0:
@@ -236,7 +235,8 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                 intermediate.append(query)
 
         intermediate = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate] for i in s]
-        intermediate_ref_boxes = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate_ref_boxes] for i in s]
+        intermediate_ref_boxes = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate_ref_boxes]
+                                  for i in s]
 
         if self.return_intermediate:
             if self.bbox_embed is not None:
@@ -253,17 +253,17 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
         return query.unsqueeze(0)
 
     def forward_regular(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        anchor_box_embed=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            anchor_box_embed=None,
+            **kwargs,
     ):
         intermediate = []
         intermediate_ref_boxes = []
@@ -289,11 +289,11 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
 
             if self.modulate_hw_attn:
                 ref_hw_cond = self.ref_anchor_head(query).sigmoid()
-                query_sine_embed[..., self.embed_dim // 2 :] *= (
-                    ref_hw_cond[..., 0] / obj_center[..., 2]
+                query_sine_embed[..., self.embed_dim // 2:] *= (
+                        ref_hw_cond[..., 0] / obj_center[..., 2]
                 ).unsqueeze(-1)
                 query_sine_embed[..., : self.embed_dim // 2] *= (
-                    ref_hw_cond[..., 1] / obj_center[..., 3]
+                        ref_hw_cond[..., 1] / obj_center[..., 3]
                 ).unsqueeze(-1)
 
             query = layer(
@@ -342,6 +342,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                 ]
 
         return query.unsqueeze(0)
+
 
 class DabDetrTransformer(nn.Module):
     def __init__(self, encoder=None, decoder=None):
