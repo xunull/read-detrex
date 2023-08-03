@@ -94,6 +94,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
 
         for idx in range(num_layers - 1):
             self.layers[idx + 1].attentions[1].query_pos_proj = None
+
         # SQR code
         self.start_q = [0, 0, 1, 2, 4, 7, 12]
         self.end_q = [1, 2, 4, 7, 12, 20, 33]
@@ -160,13 +161,13 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
         intermediate = []
         intermediate_ref_boxes = []
         reference_boxes = anchor_box_embed.sigmoid()
-
-
+        # 1,2,4,7,12
+        # 这两个每次decoder之后越存越多
         query_list_reserve = [query]  # fangyi
         reference_boxes_list_reserve = [reference_boxes]  # fangyi
 
         for idx, layer in enumerate(self.layers):
-
+            # [0,1] [0,2] [1,4] [2,7] [4,12] [7,20]
             start_q = self.start_q[idx]
             end_q = self.end_q[idx]
 
@@ -174,12 +175,12 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
             # 取出query (select recollection)
             query_list = query_list_reserve.copy()[start_q:end_q]
             reference_boxes_list = reference_boxes_list_reserve.copy()[start_q:end_q]
-
+            #
             # 取出之后cat
             query = torch.cat(query_list, dim=1)
             reference_boxes = torch.cat(reference_boxes_list, dim=1)
 
-            # 1 2 3 5 8 13
+            # 1 2 3 5 8 13 20
             fakesetsize = int(query.shape[1] / batchsize)
 
             # k v key_pos 进行repeat
@@ -214,6 +215,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                         ref_hw_cond[..., 1] / obj_center[..., 3]
                 ).unsqueeze(-1)
 
+            # 第二个维度是bs的倍数
             # [300,3,256]
             # [300,6,256]
             # [300,9,256]
@@ -248,7 +250,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                     intermediate.append(query)
 
             # --------------------------- 以上相同
-
+            # SQR code
             query_list_reserve.extend([_ for _ in torch.split(query, batchsize, dim=1)])
             reference_boxes_list_reserve.extend([_ for _ in torch.split(reference_boxes, batchsize, dim=1)])
 
@@ -258,6 +260,7 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
                 intermediate.pop()
                 intermediate.append(query)
 
+        # SQR code
         # b=[i for s in a for i in s]
         intermediate = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate] for i in s]
         intermediate_ref_boxes = [i for s in [list(torch.split(k, batchsize, dim=1)) for k in intermediate_ref_boxes]
