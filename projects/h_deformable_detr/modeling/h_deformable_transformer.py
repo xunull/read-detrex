@@ -398,6 +398,7 @@ class HDeformableDetrTransformer(nn.Module):
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             feat_flatten.append(feat)
             mask_flatten.append(mask)
+
         feat_flatten = torch.cat(feat_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
