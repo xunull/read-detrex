@@ -84,6 +84,8 @@ class DeformableDETR(nn.Module):
 
         # define learnable query embedding
         self.num_queries = num_queries
+        # 如果不使用两阶段，那么decoder部分还是需要一个query_embedding
+        # 如果使用两阶段，decoder使用的相关的初始化，由encoder输出决定
         if not as_two_stage:
             self.query_embedding = nn.Embedding(num_queries, embed_dim * 2)
 
@@ -172,6 +174,7 @@ class DeformableDETR(nn.Module):
         multi_level_feats = self.neck(features)
         multi_level_masks = []
         multi_level_position_embeddings = []
+        # 多特征层的mask 处理
         for feat in multi_level_feats:
             multi_level_masks.append(
                 F.interpolate(img_masks[None], size=feat.shape[-2:]).to(torch.bool).squeeze(0)
@@ -190,7 +193,8 @@ class DeformableDETR(nn.Module):
             enc_outputs_class,
             enc_outputs_coord_unact,
         ) = self.transformer(
-            multi_level_feats, multi_level_masks, multi_level_position_embeddings, query_embeds
+            multi_level_feats, multi_level_masks, multi_level_position_embeddings,
+            query_embeds
         )
 
         # Calculate output coordinates and classes.
@@ -212,6 +216,7 @@ class DeformableDETR(nn.Module):
             outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
+
         outputs_class = torch.stack(outputs_classes)
         # tensor shape: [num_decoder_layers, bs, num_query, num_classes]
         outputs_coord = torch.stack(outputs_coords)

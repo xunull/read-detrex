@@ -222,8 +222,11 @@ class DeformableDetrTransformer(nn.Module):
             self,
             encoder=None,
             decoder=None,
+            # 4个特征层
             num_feature_levels=4,
+            # 是否使用双阶段的形式
             as_two_stage=False,
+            # 如果使用双阶段的形式，选择的query的数量
             two_stage_num_proposals=300,
     ):
         super(DeformableDetrTransformer, self).__init__()
@@ -240,6 +243,7 @@ class DeformableDetrTransformer(nn.Module):
         if self.as_two_stage:
             self.enc_output = nn.Linear(self.embed_dim, self.embed_dim)
             self.enc_output_norm = nn.LayerNorm(self.embed_dim)
+            # todo
             self.pos_trans = nn.Linear(self.embed_dim * 2, self.embed_dim * 2)
             self.pos_trans_norm = nn.LayerNorm(self.embed_dim * 2)
         else:
@@ -391,8 +395,10 @@ class DeformableDetrTransformer(nn.Module):
             feat = feat.flatten(2).transpose(1, 2)  # bs, hw, c
             mask = mask.flatten(1)
             pos_embed = pos_embed.flatten(2).transpose(1, 2)  # bs, hw, c
+            # level的编码和空间位置编码加在一起
             lvl_pos_embed = pos_embed + self.level_embeds[lvl].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
+
             feat_flatten.append(feat)
             mask_flatten.append(mask)
         feat_flatten = torch.cat(feat_flatten, 1)
@@ -468,6 +474,7 @@ class DeformableDetrTransformer(nn.Module):
         )
 
         inter_references_out = inter_references
+
         if self.as_two_stage:
             return (
                 inter_states,
@@ -476,4 +483,5 @@ class DeformableDetrTransformer(nn.Module):
                 enc_outputs_class,
                 enc_outputs_coord_unact,
             )
+
         return inter_states, init_reference_out, inter_references_out, None, None
