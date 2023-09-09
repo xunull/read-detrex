@@ -52,18 +52,18 @@ class AnchorDETR(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone: nn.Module,
-        in_features: List[str],
-        in_channels: int,
-        transformer: nn.Module,
-        embed_dim: int,
-        criterion: nn.Module,
-        aux_loss: bool = True,
-        pixel_mean: List[float] = [123.675, 116.280, 103.530],
-        pixel_std: List[float] = [58.395, 57.120, 57.375],
-        select_box_nums_for_evaluation: int = 100,
-        device: str = "cuda",
+            self,
+            backbone: nn.Module,
+            in_features: List[str],
+            in_channels: int,
+            transformer: nn.Module,
+            embed_dim: int,
+            criterion: nn.Module,
+            aux_loss: bool = True,
+            pixel_mean: List[float] = [123.675, 116.280, 103.530],
+            pixel_std: List[float] = [58.395, 57.120, 57.375],
+            select_box_nums_for_evaluation: int = 100,
+            device: str = "cuda",
     ):
         super(AnchorDETR, self).__init__()
         # define backbone and position embedding module
@@ -90,7 +90,6 @@ class AnchorDETR(nn.Module):
 
         # The total nums of selected boxes for evaluation
         self.select_box_nums_for_evaluation = select_box_nums_for_evaluation
-
 
     def forward(self, batched_inputs):
         """Forward function of `DAB-DETR` which excepts a list of dict as inputs.
@@ -157,7 +156,7 @@ class AnchorDETR(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -205,7 +204,7 @@ class AnchorDETR(nn.Module):
         boxes = torch.gather(box_pred, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         for i, (scores_per_image, labels_per_image, box_pred_per_image, image_size) in enumerate(
-            zip(scores, labels, boxes, image_sizes)
+                zip(scores, labels, boxes, image_sizes)
         ):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))

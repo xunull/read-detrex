@@ -39,21 +39,21 @@ def _get_activation_fn(activation):
 
 class AnchorDETRTransformer(nn.Module):
     def __init__(
-            self, 
-            embed_dim=256, 
+            self,
+            embed_dim=256,
             num_heads=8,
-            num_encoder_layers=6, 
-            num_decoder_layers=6, 
-            dim_feedforward=1024, 
+            num_encoder_layers=6,
+            num_decoder_layers=6,
+            dim_feedforward=1024,
             dropout=0.,
-            activation="relu", 
+            activation="relu",
             num_feature_levels=1,
             num_query_position=300,
             num_query_pattern=3,
             spatial_prior="learned",
             attention_type="RCDA",
             num_classes=80,
-        ):
+    ):
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -61,13 +61,13 @@ class AnchorDETRTransformer(nn.Module):
 
         self.attention_type = attention_type
         encoder_layer = TransformerEncoderLayerSpatial(embed_dim, dim_feedforward,
-                                                          dropout, activation, num_heads , attention_type)
+                                                       dropout, activation, num_heads, attention_type)
         encoder_layer_level = TransformerEncoderLayerLevel(embed_dim, dim_feedforward,
-                                                          dropout, activation, num_heads)
+                                                           dropout, activation, num_heads)
 
         decoder_layer = TransformerDecoderLayer(embed_dim, dim_feedforward,
-                                                          dropout, activation, num_heads,
-                                                          num_feature_levels, attention_type)
+                                                dropout, activation, num_heads,
+                                                num_feature_levels, attention_type)
 
         if num_feature_levels == 1:
             self.num_encoder_layers_level = 0
@@ -79,15 +79,19 @@ class AnchorDETRTransformer(nn.Module):
         self.encoder_layers_level = _get_clones(encoder_layer_level, self.num_encoder_layers_level)
         self.decoder_layers = _get_clones(decoder_layer, num_decoder_layers)
 
-        self.spatial_prior=spatial_prior
+        self.spatial_prior = spatial_prior
 
-        if num_feature_levels>1:
+        if num_feature_levels > 1:
+            # 标识特征层使用的
             self.level_embed = nn.Embedding(num_feature_levels, embed_dim)
+
         self.num_pattern = num_query_pattern
+        [3, 256]
         self.pattern = nn.Embedding(self.num_pattern, embed_dim)
 
         self.num_position = num_query_position
         if self.spatial_prior == "learned":
+            # 空间先验如果是可学习的形式，那么其是网络中一个可学习的2维嵌入 [300,2]
             self.position = nn.Embedding(self.num_position, 2)
 
         self.adapt_pos2d = nn.Sequential(
@@ -95,6 +99,7 @@ class AnchorDETRTransformer(nn.Module):
             nn.ReLU(),
             nn.Linear(embed_dim, embed_dim),
         )
+
         self.adapt_pos1d = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
@@ -119,6 +124,7 @@ class AnchorDETRTransformer(nn.Module):
 
         nn.init.constant_(self.bbox_embed.layers[-1].weight.data, 0)
         nn.init.constant_(self.bbox_embed.layers[-1].bias.data, 0)
+
         if self.spatial_prior == "learned":
             nn.init.uniform_(self.position.weight.data, 0, 1)
 
@@ -126,42 +132,45 @@ class AnchorDETRTransformer(nn.Module):
         self.class_embed = nn.ModuleList([self.class_embed for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList([self.bbox_embed for _ in range(num_pred)])
 
-
     def forward(self, srcs, masks):
         # prepare input for decoder
         bs, l, c, h, w = srcs.shape
 
         if self.spatial_prior == "learned":
+            # [bs,3*300,2]
             reference_points = self.position.weight.unsqueeze(0).repeat(bs, self.num_pattern, 1)
         elif self.spatial_prior == "grid":
-            nx=ny=round(math.sqrt(self.num_position))
-            self.num_position=nx*ny
+            nx = ny = round(math.sqrt(self.num_position))
+            self.num_position = nx * ny
             x = (torch.arange(nx) + 0.5) / nx
             y = (torch.arange(ny) + 0.5) / ny
-            xy=torch.meshgrid(x,y)
-            reference_points=torch.cat([xy[0].reshape(-1)[...,None],xy[1].reshape(-1)[...,None]],-1).cuda()
+            xy = torch.meshgrid(x, y)
+            reference_points = torch.cat([xy[0].reshape(-1)[..., None], xy[1].reshape(-1)[..., None]], -1).cuda()
             reference_points = reference_points.unsqueeze(0).repeat(bs, self.num_pattern, 1)
         else:
             raise ValueError(f'unknown {self.spatial_prior} spatial prior')
 
+        # tgt 在DETR中是zero tensor
+        # [bs,3*300,256]
         tgt = self.pattern.weight.reshape(1, self.num_pattern, 1, c).repeat(bs, 1, self.num_position, 1).reshape(
             bs, self.num_pattern * self.num_position, c)
 
-        mask = masks.unsqueeze(1).repeat(1,l,1,1).reshape(bs*l,h,w)
+        mask = masks.unsqueeze(1).repeat(1, l, 1, 1).reshape(bs * l, h, w)
         pos_col, pos_row = mask2pos(mask)
-        if self.attention_type=="RCDA":
+        if self.attention_type == "RCDA":
             posemb_row = self.adapt_pos1d(pos2posemb1d(pos_row))
             posemb_col = self.adapt_pos1d(pos2posemb1d(pos_col))
             posemb_2d = None
         else:
-            pos_2d = torch.cat([pos_row.unsqueeze(1).repeat(1, h, 1).unsqueeze(-1), pos_col.unsqueeze(2).repeat(1, 1, w).unsqueeze(-1)],dim=-1)
+            pos_2d = torch.cat([pos_row.unsqueeze(1).repeat(1, h, 1).unsqueeze(-1),
+                                pos_col.unsqueeze(2).repeat(1, 1, w).unsqueeze(-1)], dim=-1)
             posemb_2d = self.adapt_pos2d(pos2posemb2d(pos_2d))
             posemb_row = posemb_col = None
 
         outputs = srcs.reshape(bs * l, c, h, w)
 
         for idx in range(len(self.encoder_layers)):
-            outputs = self.encoder_layers[idx](outputs, mask, posemb_row, posemb_col,posemb_2d)
+            outputs = self.encoder_layers[idx](outputs, mask, posemb_row, posemb_col, posemb_2d)
 
         srcs = outputs.reshape(bs, l, c, h, w)
 
@@ -169,17 +178,31 @@ class AnchorDETRTransformer(nn.Module):
 
         outputs_classes = []
         outputs_coords = []
+        # 6层decoder在这里循环了
         for lid, layer in enumerate(self.decoder_layers):
-            output = layer(output, reference_points, srcs, mask, adapt_pos2d=self.adapt_pos2d,
-                           adapt_pos1d=self.adapt_pos1d, posemb_row=posemb_row, posemb_col=posemb_col,posemb_2d=posemb_2d)
+            output = layer(output,
+
+                           reference_points,
+                           srcs, mask,
+
+                           adapt_pos2d=self.adapt_pos2d,
+                           adapt_pos1d=self.adapt_pos1d,
+                           posemb_row=posemb_row,
+                           posemb_col=posemb_col,
+                           posemb_2d=posemb_2d)
+
             reference = inverse_sigmoid(reference_points)
             outputs_class = self.class_embed[lid](output)
+            # 框体输出
             tmp = self.bbox_embed[lid](output)
             if reference.shape[-1] == 4:
+                # 输出值偏移修正
                 tmp += reference
             else:
                 assert reference.shape[-1] == 2
+                # 只修正中心坐标
                 tmp[..., :2] += reference
+            # 修正后的坐标仅用作最后decoder的输出，并不会在decoder层内使用
             outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class[None,])
             outputs_coords.append(outputs_coord[None,])
@@ -197,10 +220,10 @@ class TransformerEncoderLayerSpatial(nn.Module):
         super().__init__()
 
         self.attention_type = attention_type
-        if attention_type=="RCDA":
-            attention_module=MultiheadRCDA
+        if attention_type == "RCDA":
+            attention_module = MultiheadRCDA
         elif attention_type == "nn.MultiheadAttention":
-            attention_module=nn.MultiheadAttention
+            attention_module = nn.MultiheadAttention
         else:
             raise ValueError(f'unknown {attention_type} attention_type')
 
@@ -216,12 +239,12 @@ class TransformerEncoderLayerSpatial(nn.Module):
     def with_pos_embed(tensor, pos):
         return tensor if pos is None else tensor + pos
 
-    def forward(self, src, padding_mask=None, posemb_row=None, posemb_col=None,posemb_2d=None):
+    def forward(self, src, padding_mask=None, posemb_row=None, posemb_col=None, posemb_2d=None):
         # self attention
         bz, c, h, w = src.shape
         src = src.permute(0, 2, 3, 1)
 
-        if self.attention_type=="RCDA":
+        if self.attention_type == "RCDA":
             posemb_row = posemb_row.unsqueeze(1).repeat(1, h, 1, 1)
             posemb_col = posemb_col.unsqueeze(2).repeat(1, 1, w, 1)
             src2 = self.self_attn((src + posemb_row).reshape(bz, h * w, c), (src + posemb_col).reshape(bz, h * w, c),
@@ -230,7 +253,9 @@ class TransformerEncoderLayerSpatial(nn.Module):
         else:
             src2 = self.self_attn((src + posemb_2d).reshape(bz, h * w, c).transpose(0, 1),
                                   (src + posemb_2d).reshape(bz, h * w, c).transpose(0, 1),
-                                  src.reshape(bz, h * w, c).transpose(0, 1), key_padding_mask=padding_mask.reshape(bz, h*w))[0].transpose(0, 1).reshape(bz, h, w, c)
+                                  src.reshape(bz, h * w, c).transpose(0, 1),
+                                  key_padding_mask=padding_mask.reshape(bz, h * w))[0].transpose(0, 1).reshape(bz, h, w,
+                                                                                                               c)
 
         src = src + self.dropout1(src2)
         src = self.norm1(src)
@@ -277,7 +302,6 @@ class TransformerEncoderLayerLevel(nn.Module):
         return src
 
 
-
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, embed_dim=256, d_ffn=1024,
                  dropout=0., activation="relu", n_heads=8,
@@ -286,10 +310,10 @@ class TransformerDecoderLayer(nn.Module):
 
         self.attention_type = attention_type
         self.attention_type = attention_type
-        if attention_type=="RCDA":
-            attention_module=MultiheadRCDA
+        if attention_type == "RCDA":
+            attention_module = MultiheadRCDA
         elif attention_type == "nn.MultiheadAttention":
-            attention_module=nn.MultiheadAttention
+            attention_module = nn.MultiheadAttention
         else:
             raise ValueError(f'unknown {attention_type} attention_type')
 
@@ -303,9 +327,8 @@ class TransformerDecoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(dropout)
         self.norm2 = nn.LayerNorm(embed_dim)
 
-
         # level combination
-        if n_levels>1:
+        if n_levels > 1:
             self.level_fc = nn.Linear(embed_dim * n_levels, embed_dim)
 
         # ffn
@@ -316,17 +339,19 @@ class TransformerDecoderLayer(nn.Module):
         return tensor if pos is None else tensor + pos
 
     def forward(
-            self, 
-            tgt, 
-            reference_points, 
-            srcs, 
-            src_padding_masks=None, 
+            self,
+            # 在第一个decoder中是pattern embedding
+            tgt,
+            # 参考点位，是一个embedding 或者固定点位
+            reference_points,
+            srcs,
+            src_padding_masks=None,
             adapt_pos2d=None,
-            adapt_pos1d=None, 
-            posemb_row=None, 
-            posemb_col=None, 
+            adapt_pos1d=None,
+            posemb_row=None,
+            posemb_col=None,
             posemb_2d=None
-        ):
+    ):
         tgt_len = tgt.shape[1]
 
         query_pos = adapt_pos2d(pos2posemb2d(reference_points))
@@ -347,12 +372,14 @@ class TransformerDecoderLayer(nn.Module):
             src_row = src_col = srcs
             k_row = src_row + posemb_row
             k_col = src_col + posemb_col
-            tgt2 = self.cross_attn((tgt + query_pos_x).repeat(l, 1, 1), (tgt + query_pos_y).repeat(l, 1, 1), k_row, k_col,
-                                   srcs, key_padding_mask=src_padding_masks)[0].transpose(0, 1)
+            tgt2 = \
+                self.cross_attn((tgt + query_pos_x).repeat(l, 1, 1), (tgt + query_pos_y).repeat(l, 1, 1), k_row, k_col,
+                                srcs, key_padding_mask=src_padding_masks)[0].transpose(0, 1)
         else:
             tgt2 = self.cross_attn((tgt + query_pos).repeat(l, 1, 1).transpose(0, 1),
-                                   (srcs + posemb_2d).reshape(bz * l, h * w, c).transpose(0,1),
-                                   srcs.reshape(bz * l, h * w, c).transpose(0, 1), key_padding_mask=src_padding_masks.reshape(bz*l, h*w))[0].transpose(0,1)
+                                   (srcs + posemb_2d).reshape(bz * l, h * w, c).transpose(0, 1),
+                                   srcs.reshape(bz * l, h * w, c).transpose(0, 1),
+                                   key_padding_mask=src_padding_masks.reshape(bz * l, h * w))[0].transpose(0, 1)
 
         if l > 1:
             tgt2 = self.level_fc(tgt2.reshape(bz, l, tgt_len, c).permute(0, 2, 3, 1).reshape(bz, tgt_len, c * l))
@@ -396,9 +423,3 @@ class MLP(nn.Module):
         for i, layer in enumerate(self.layers):
             x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
-
-
-
-
-
-
