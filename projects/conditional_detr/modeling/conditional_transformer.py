@@ -143,6 +143,7 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
         )
         self.return_intermediate = return_intermediate
         self.embed_dim = self.layers[0].embed_dim
+        # 图3中的FFN T
         # 两层Linear，输出维度不变
         self.query_scale = MLP(self.embed_dim, self.embed_dim, self.embed_dim, 2)
         # 两层Linear，最后输出2维
@@ -192,7 +193,10 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
             # get sine embedding for the query vector
             # 图3中紫色框的 pos embedding
             query_sine_embed = get_sine_pos_embed(obj_center)
+
             # apply position transform
+            # 图3中的右侧灰色框体内的Ps和FFN的结果相乘
+            # [..., :x]的处理 这种方式，如果self.embed_dim与query_sine_embed的最后一个维度的大小相同，那么其实就还是原来的tensor
             query_sine_embed = query_sine_embed[..., : self.embed_dim] * position_transform
 
             query: torch.Tensor = layer(
