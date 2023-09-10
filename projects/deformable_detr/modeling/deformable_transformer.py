@@ -290,6 +290,7 @@ class DeformableDetrTransformer(nn.Module):
             _cur += H * W
 
         output_proposals = torch.cat(proposals, 1)
+        # 选择不要太靠近图像边缘的
         # Ensure that the proposals are not positioned too closely to the boundaries.
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(
             -1, keepdim=True
@@ -379,6 +380,8 @@ class DeformableDetrTransformer(nn.Module):
             query_embed,
             **kwargs,
     ):
+        # 如果使用two_stage吗, 那么就不需要使用query_embed
+        # 当使用two_stage时，decoder的query_embed的来源是从memory中筛选出来的
         assert self.as_two_stage or query_embed is not None
 
         feat_flatten = []
@@ -434,21 +437,27 @@ class DeformableDetrTransformer(nn.Module):
             output_memory, output_proposals = self.gen_encoder_output_proposals(
                 memory, mask_flatten, spatial_shapes
             )
-
+            # 经过分类头
             enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
+            # 经过坐标头
             enc_outputs_coord_unact = (
                     self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
             )
 
             topk = self.two_stage_num_proposals
+            # 选择topk
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
+            # 对应的box
             topk_coords_unact = torch.gather(
                 enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
             )
+            # 脱离
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
+            # 作为初始的点位
             init_reference_out = reference_points
             pos_trans_out = self.pos_trans_norm(
+                # get_proposal_pos_embed 转化成位置编码的形式
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact))
             )
             query_pos, query = torch.split(pos_trans_out, c, dim=2)
@@ -461,6 +470,7 @@ class DeformableDetrTransformer(nn.Module):
 
         # decoder
         inter_states, inter_references = self.decoder(
+            # DETR中的tgt的意义
             query=query,  # bs, num_queries, embed_dims
             key=None,  # bs, num_tokens, embed_dims
             value=memory,  # bs, num_tokens, embed_dims
