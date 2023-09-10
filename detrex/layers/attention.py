@@ -187,7 +187,9 @@ class ConditionalSelfAttention(nn.Module):
             key=None,
             value=None,
             identity=None,
+            # 目标查询的Embedding，256维度
             query_pos=None,
+            # 空间位置编码
             key_pos=None,
             attn_mask=None,
             key_padding_mask=None,
@@ -339,8 +341,11 @@ class ConditionalCrossAttention(nn.Module):
             key=None,
             value=None,
             identity=None,
+            # 目标查询的Embedding，256维度
             query_pos=None,
+            # 空间位置编码
             key_pos=None,
+            # 图3中的紫色框的输出
             query_sine_embed=None,
             is_first_layer=False,
             attn_mask=None,
@@ -418,24 +423,32 @@ class ConditionalCrossAttention(nn.Module):
 
         # position projection
         key_pos = self.key_pos_proj(key_pos)
+
         if is_first_layer:
             query_pos = self.query_pos_proj(query_pos)
+            # 第一层相加这个，并且在第一层也有cat的空间信息，在这里的这个还有必要么
             q = query_content + query_pos
             k = key_content + key_pos
         else:
+
             q = query_content
             k = key_content
+
         v = value
 
         # preprocess
         q = q.view(N, B, self.num_heads, C // self.num_heads)
+        # 经过一个Linear
         query_sine_embed = self.query_pos_sine_proj(query_sine_embed).view(
             N, B, self.num_heads, C // self.num_heads
         )
+        # conditional detr在进入交叉注意模块前，query使用的是cat
+        # 连接空间信息
         q = torch.cat([q, query_sine_embed], dim=3).view(N, B, C * 2)
 
         k = k.view(HW, B, self.num_heads, C // self.num_heads)  # N, 16, 256
         key_pos = key_pos.view(HW, B, self.num_heads, C // self.num_heads)
+        # 连接空间信息
         k = torch.cat([k, key_pos], dim=3).view(HW, B, C * 2)
 
         # attention calculation

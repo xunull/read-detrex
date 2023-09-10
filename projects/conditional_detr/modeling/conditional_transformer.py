@@ -30,16 +30,16 @@ from detrex.layers import (
 
 class ConditionalDetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.1,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.1,
-        activation: nn.Module = nn.PReLU(),
-        post_norm: bool = False,
-        num_layers: int = 6,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.1,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.1,
+            activation: nn.Module = nn.PReLU(),
+            post_norm: bool = False,
+            num_layers: int = 6,
+            batch_first: bool = False,
     ):
         super(ConditionalDetrTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -69,16 +69,16 @@ class ConditionalDetrTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         for layer in self.layers:
@@ -100,17 +100,17 @@ class ConditionalDetrTransformerEncoder(TransformerLayerSequence):
 
 class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.0,
-        activation: nn.Module = nn.PReLU(),
-        num_layers: int = None,
-        batch_first: bool = False,
-        post_norm: bool = True,
-        return_intermediate: bool = True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.0,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.0,
+            activation: nn.Module = nn.PReLU(),
+            num_layers: int = None,
+            batch_first: bool = False,
+            post_norm: bool = True,
+            return_intermediate: bool = True,
     ):
         super(ConditionalDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -143,7 +143,9 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
         )
         self.return_intermediate = return_intermediate
         self.embed_dim = self.layers[0].embed_dim
+        # 两层Linear，输出维度不变
         self.query_scale = MLP(self.embed_dim, self.embed_dim, self.embed_dim, 2)
+        # 两层Linear，最后输出2维
         self.ref_point_head = MLP(self.embed_dim, self.embed_dim, 2, 2)
 
         self.bbox_embed = None
@@ -157,24 +159,28 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
             self.layers[idx + 1].attentions[1].query_pos_proj = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            # 传入的是zero tensor
+            query,
+            key,
+            value,
+            # 目标查询的Embedding
+            query_pos=None,
+            # 空间位置编码
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
         intermediate = []
-        reference_points_before_sigmoid = self.ref_point_head(
-            query_pos
-        )  # [num_queries, batch_size, 2]
+        # 根据目标查询得到参考点位
+        reference_points_before_sigmoid = self.ref_point_head(query_pos)  # [num_queries, batch_size, 2]
+        # 限制在0-1, 图3中的紫色框内的sigmoid
         reference_points: torch.Tensor = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
 
         for idx, layer in enumerate(self.layers):
+            # xy坐标
             obj_center = reference_points[..., :2].transpose(0, 1)  # [num_queries, batch_size, 2]
 
             # do not apply transform in position in the first decoder layer
@@ -184,6 +190,7 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
                 position_transform = self.query_scale(query)
 
             # get sine embedding for the query vector
+            # 图3中紫色框的 pos embedding
             query_sine_embed = get_sine_pos_embed(obj_center)
             # apply position transform
             query_sine_embed = query_sine_embed[..., : self.embed_dim] * position_transform
@@ -192,8 +199,11 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
                 query,
                 key,
                 value,
+                # 目标查询的Embedding，256维度
                 query_pos=query_pos,
+                # 空间位置编码
                 key_pos=key_pos,
+                # 图3中紫色框的输出
                 query_sine_embed=query_sine_embed,
                 attn_masks=attn_masks,
                 query_key_padding_mask=query_key_padding_mask,
@@ -228,6 +238,7 @@ class ConditionalDetrTransformer(nn.Module):
         super(ConditionalDetrTransformer, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
+        # todo
         self.embed_dim = self.encoder.embed_dim
 
         self.init_weights()
@@ -237,7 +248,11 @@ class ConditionalDetrTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, mask, query_embed, pos_embed):
+    def forward(self, x, mask,
+                # 目标查询的嵌入
+                query_embed,
+                # 空间位置编码
+                pos_embed):
         bs, c, h, w = x.shape
         x = x.view(bs, c, -1).permute(2, 0, 1)
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
@@ -250,6 +265,7 @@ class ConditionalDetrTransformer(nn.Module):
             query_pos=pos_embed,
             query_key_padding_mask=mask,
         )
+        # 与DETR相同，zero tensor
         target = torch.zeros_like(query_embed)
 
         hidden_state, references = self.decoder(
