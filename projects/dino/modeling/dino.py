@@ -57,25 +57,27 @@ class DINO(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone: nn.Module,
-        position_embedding: nn.Module,
-        neck: nn.Module,
-        transformer: nn.Module,
-        embed_dim: int,
-        num_classes: int,
-        num_queries: int,
-        criterion: nn.Module,
-        pixel_mean: List[float] = [123.675, 116.280, 103.530],
-        pixel_std: List[float] = [58.395, 57.120, 57.375],
-        aux_loss: bool = True,
-        select_box_nums_for_evaluation: int = 300,
-        device="cuda",
-        dn_number: int = 100,
-        label_noise_ratio: float = 0.2,
-        box_noise_scale: float = 1.0,
-        input_format: Optional[str] = "RGB",
-        vis_period: int = 0,
+            self,
+            backbone: nn.Module,
+            position_embedding: nn.Module,
+            neck: nn.Module,
+            transformer: nn.Module,
+            embed_dim: int,
+            num_classes: int,
+            num_queries: int,
+            criterion: nn.Module,
+            pixel_mean: List[float] = [123.675, 116.280, 103.530],
+            pixel_std: List[float] = [58.395, 57.120, 57.375],
+            aux_loss: bool = True,
+            select_box_nums_for_evaluation: int = 300,
+            device="cuda",
+            # 这个跟DN的group方式不同了，100对，总共200个
+            dn_number: int = 100,
+            label_noise_ratio: float = 0.2,
+            box_noise_scale: float = 1.0,
+            # todo
+            input_format: Optional[str] = "RGB",
+            vis_period: int = 0,
     ):
         super().__init__()
         # define backbone and position embedding module
@@ -131,6 +133,7 @@ class DINO(nn.Module):
         nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
 
         # two-stage
+        # 这两个值，并不在transformer中，因此需要赋值
         self.transformer.decoder.class_embed = self.class_embed
         self.transformer.decoder.bbox_embed = self.bbox_embed
 
@@ -146,7 +149,6 @@ class DINO(nn.Module):
         self.vis_period = vis_period
         if vis_period > 0:
             assert input_format is not None, "input_format is required for visualization!"
-
 
     def forward(self, batched_inputs):
         """Forward function of `DINO` which excepts a list of dict as inputs.
@@ -216,6 +218,7 @@ class DINO(nn.Module):
             )
         else:
             input_query_label, input_query_bbox, attn_mask, dn_meta = None, None, None, None
+
         query_embeds = (input_query_label, input_query_bbox)
 
         # feed into transformer
@@ -284,7 +287,7 @@ class DINO(nn.Module):
                     box_pred = output["pred_boxes"]
                     results = self.inference(box_cls, box_pred, images.image_sizes)
                     self.visualize_training(batched_inputs, results)
-            
+
             # compute loss
             loss_dict = self.criterion(output, targets, dn_meta)
             weight_dict = self.criterion.weight_dict
@@ -298,7 +301,7 @@ class DINO(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -329,7 +332,6 @@ class DINO(nn.Module):
             storage.put_image(vis_name, vis_img)
             break  # only visualize one image in a batch
 
-
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
@@ -341,15 +343,15 @@ class DINO(nn.Module):
         ]
 
     def prepare_for_cdn(
-        self,
-        targets,
-        dn_number,
-        label_noise_ratio,
-        box_noise_scale,
-        num_queries,
-        num_classes,
-        hidden_dim,
-        label_enc,
+            self,
+            targets,
+            dn_number,
+            label_noise_ratio,
+            box_noise_scale,
+            num_queries,
+            num_classes,
+            hidden_dim,
+            label_enc,
     ):
         """
         A major difference of DINO from DN-DETR is that the author process pattern embedding pattern embedding
@@ -365,7 +367,7 @@ class DINO(nn.Module):
         """
         if dn_number <= 0:
             return None, None, None, None
-            # positive and negative dn queries
+        # positive and negative dn queries
         dn_number = dn_number * 2
         known = [(torch.ones_like(t["labels"])).cuda() for t in targets]
         batch_size = len(known)
@@ -422,7 +424,7 @@ class DINO(nn.Module):
             diff[:, 2:] = known_bboxs[:, 2:] / 2
 
             rand_sign = (
-                torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
+                    torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
             )
             rand_part = torch.rand_like(known_bboxs)
             rand_part[negative_idx] += 1.0
@@ -462,20 +464,20 @@ class DINO(nn.Module):
         for i in range(dn_number):
             if i == 0:
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1),
-                    single_padding * 2 * (i + 1) : pad_size,
+                single_padding * 2 * i: single_padding * 2 * (i + 1),
+                single_padding * 2 * (i + 1): pad_size,
                 ] = True
             if i == dn_number - 1:
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1), : single_padding * i * 2
+                single_padding * 2 * i: single_padding * 2 * (i + 1), : single_padding * i * 2
                 ] = True
             else:
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1),
-                    single_padding * 2 * (i + 1) : pad_size,
+                single_padding * 2 * i: single_padding * 2 * (i + 1),
+                single_padding * 2 * (i + 1): pad_size,
                 ] = True
                 attn_mask[
-                    single_padding * 2 * i : single_padding * 2 * (i + 1), : single_padding * 2 * i
+                single_padding * 2 * i: single_padding * 2 * (i + 1), : single_padding * 2 * i
                 ] = True
 
         dn_meta = {
@@ -488,15 +490,19 @@ class DINO(nn.Module):
     def dn_post_process(self, outputs_class, outputs_coord, dn_metas):
         if dn_metas and dn_metas["single_padding"] > 0:
             padding_size = dn_metas["single_padding"] * dn_metas["dn_num"]
+            # 前面的这些是去噪的部分
             output_known_class = outputs_class[:, :, :padding_size, :]
             output_known_coord = outputs_coord[:, :, :padding_size, :]
+            # 后面这些是正常的匹配预测部分
             outputs_class = outputs_class[:, :, padding_size:, :]
             outputs_coord = outputs_coord[:, :, padding_size:, :]
 
             out = {"pred_logits": output_known_class[-1], "pred_boxes": output_known_coord[-1]}
             if self.aux_loss:
                 out["aux_outputs"] = self._set_aux_loss(output_known_class, output_known_coord)
+            # output_known_lbs_bboxes 内容是去噪部分的
             dn_metas["output_known_lbs_bboxes"] = out
+        # 返回这俩还是网络自己预测的，不包括去噪部分的
         return outputs_class, outputs_coord
 
     def preprocess_image(self, batched_inputs):
@@ -536,7 +542,7 @@ class DINO(nn.Module):
         # scores, labels = F.softmax(box_cls, dim=-1)[:, :, :-1].max(-1)
 
         for i, (scores_per_image, labels_per_image, box_pred_per_image, image_size) in enumerate(
-            zip(scores, labels, boxes, image_sizes)
+                zip(scores, labels, boxes, image_sizes)
         ):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))
