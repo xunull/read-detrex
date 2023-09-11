@@ -118,6 +118,7 @@ class MultiheadAttention(nn.Module):
             if query_pos is not None:
                 # use query_pos if key_pos is not available
                 if query_pos.shape == key.shape:
+                    # 如果key_pos 为None时, key_pos就是query_pos
                     key_pos = query_pos
                 else:
                     warnings.warn(

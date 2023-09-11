@@ -225,17 +225,19 @@ class MultiScaleDeformableAttention(nn.Module):
     def forward(
             self,
             query: torch.Tensor,
+            # key并没有使用，使用的是value，在交叉注意力中key和value是相同的
             key: Optional[torch.Tensor] = None,
             value: Optional[torch.Tensor] = None,
             identity: Optional[torch.Tensor] = None,
             query_pos: Optional[torch.Tensor] = None,
             key_padding_mask: Optional[torch.Tensor] = None,
+            # 参考点位
             reference_points: Optional[torch.Tensor] = None,
             spatial_shapes: Optional[torch.Tensor] = None,
             level_start_index: Optional[torch.Tensor] = None,
             **kwargs
     ) -> torch.Tensor:
-
+        # 交叉注意力没有使用key_pos
         """Forward Function of MultiScaleDeformableAttention
 
         Args:
@@ -323,6 +325,7 @@ class MultiScaleDeformableAttention(nn.Module):
                     + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
             )
         elif reference_points.shape[-1] == 4:
+            # 采样点就是在各个参考点位上进行的偏移
             sampling_locations = (
                     reference_points[:, :, None, :, None, :2]
                     + sampling_offsets

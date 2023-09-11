@@ -73,6 +73,7 @@ class DeformableDetrTransformerEncoder(TransformerLayerSequence):
             query,
             key,
             value,
+            # 虽然名字为query_pos，其实就是空间位置编码
             query_pos=None,
             key_pos=None,
             attn_masks=None,
@@ -149,6 +150,7 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
             key,
             value,
             query_pos=None,
+            # 在调用时，并没有传入这个参数，并且Deformable DETR的官方源码也没有使用
             key_pos=None,
             attn_masks=None,
             query_key_padding_mask=None,
@@ -175,7 +177,9 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
                 output,
                 key,
                 value,
+                # 目标查询
                 query_pos=query_pos,
+                # 空间位置编码，decoder并没有使用，为None
                 key_pos=key_pos,
                 attn_masks=attn_masks,
                 query_key_padding_mask=query_key_padding_mask,
@@ -194,6 +198,7 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
+                # 每一层使用的reference_points都是修正更新后的
                 reference_points = new_reference_points.detach()
 
             if self.return_intermediate:
@@ -247,6 +252,7 @@ class DeformableDetrTransformer(nn.Module):
             self.pos_trans = nn.Linear(self.embed_dim * 2, self.embed_dim * 2)
             self.pos_trans_norm = nn.LayerNorm(self.embed_dim * 2)
         else:
+            # 输出坐标点位
             self.reference_points = nn.Linear(self.embed_dim, 2)
 
         self.init_weights()
@@ -415,6 +421,7 @@ class DeformableDetrTransformer(nn.Module):
         )
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in multi_level_masks], 1)
 
+        # encoder使用的参考点就是特征图上的网格点
         reference_points = self.get_reference_points(
             spatial_shapes, valid_ratios, device=feat.device
         )
@@ -423,9 +430,11 @@ class DeformableDetrTransformer(nn.Module):
             query=feat_flatten,
             key=None,
             value=None,
+            # encoder使用的query_pos 这里就是空间位置编码的意思
             query_pos=lvl_pos_embed_flatten,
             query_key_padding_mask=mask_flatten,
             spatial_shapes=spatial_shapes,
+            # 参考点位
             reference_points=reference_points,
             level_start_index=level_start_index,
             valid_ratios=valid_ratios,
@@ -446,6 +455,9 @@ class DeformableDetrTransformer(nn.Module):
 
             topk = self.two_stage_num_proposals
             # 选择topk
+            # 这里使用第一个label也没有什么问题
+            # 这个跟最后的loss处理时的判断有关心
+            # 再encoder这里，deformable detr并没有让encoder有鉴别类别的能力
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
             # 对应的box
             topk_coords_unact = torch.gather(
@@ -453,8 +465,9 @@ class DeformableDetrTransformer(nn.Module):
             )
             # 脱离
             topk_coords_unact = topk_coords_unact.detach()
+            # decoder的参考点位来自于encoder输出topk结果 [bs,300,4]
             reference_points = topk_coords_unact.sigmoid()
-            # 作为初始的点位
+            # 作为初始的点位 [bs,300,4]
             init_reference_out = reference_points
             pos_trans_out = self.pos_trans_norm(
                 # get_proposal_pos_embed 转化成位置编码的形式
@@ -465,6 +478,7 @@ class DeformableDetrTransformer(nn.Module):
             query_pos, query = torch.split(query_embed, c, dim=1)
             query_pos = query_pos.unsqueeze(0).expand(bs, -1, -1)
             query = query.unsqueeze(0).expand(bs, -1, -1)
+            # self.reference_points是神经网络
             reference_points = self.reference_points(query_pos).sigmoid()
             init_reference_out = reference_points
 
