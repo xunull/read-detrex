@@ -369,113 +369,169 @@ class DINO(nn.Module):
             return None, None, None, None
         # positive and negative dn queries
         dn_number = dn_number * 2
+        # bs大小的list，item是全是1的tensor，size是各个image gt的数量
         known = [(torch.ones_like(t["labels"])).cuda() for t in targets]
         batch_size = len(known)
+        # 各个image gt的数量
         known_num = [sum(k) for k in known]
         if int(max(known_num)) == 0:
             return None, None, None, None
-
+        # 总数200 除 一组最大的数量，就是组数，后面dn_number相当于组数的概念
+        # max*2 包括了正负两种样本的数量
         dn_number = dn_number // (int(max(known_num) * 2))
-
+        # 如果gt很多很多，那么就是1组
         if dn_number == 0:
             dn_number = 1
+
+        # 所有的1 cat到一起
         unmask_bbox = unmask_label = torch.cat(known)
+        # 取出所有gt的label值
         labels = torch.cat([t["labels"] for t in targets])
+        # 取出所有gt的box
         boxes = torch.cat([t["boxes"] for t in targets])
+        # 标识属于哪个图片
         batch_idx = torch.cat(
             [torch.full_like(t["labels"].long(), i) for i, t in enumerate(targets)]
         )
-
+        # 如 tensor([[0],[1],[2],[3]])
+        # 返回一个二维张量，其中每一行都是非零值的索引，
         known_indice = torch.nonzero(unmask_label + unmask_bbox)
+        # 拉平 如tensor([0,1,2,3])
         known_indice = known_indice.view(-1)
-
+        # 2*dn_number 重复的数量 包括正负两组，最后拉平
         known_indice = known_indice.repeat(2 * dn_number, 1).view(-1)
+        # 与上相同的处理 sum(gt)*2*(200//max(gt)*2) = sum(gt)*200//max(gt)
         known_labels = labels.repeat(2 * dn_number, 1).view(-1)
+
         known_bid = batch_idx.repeat(2 * dn_number, 1).view(-1)
+
         known_bboxs = boxes.repeat(2 * dn_number, 1)
+        # 克隆
         known_labels_expaned = known_labels.clone()
+        # 克隆
         known_bbox_expand = known_bboxs.clone()
 
         if label_noise_ratio > 0:
+            # 随机值，0-1内
             p = torch.rand_like(known_labels_expaned.float())
-            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(
-                -1
-            )  # half of bbox prob
-            new_label = torch.randint_like(
-                chosen_indice, 0, num_classes
-            )  # randomly put a new one here
+            # 被选择的id 这里比dn-detr 多了一个 1/2
+            chosen_indice = torch.nonzero(p < (label_noise_ratio * 0.5)).view(-1)  # half of bbox prob
+            # 给被选择的gt 一个随机的label id
+            new_label = torch.randint_like(chosen_indice, 0, num_classes)  # randomly put a new one here
+            # 把上面的值塞进去
             known_labels_expaned.scatter_(0, chosen_indice, new_label)
+        # bs中最多的target的数量
         single_padding = int(max(known_num))
 
         pad_size = int(single_padding * 2 * dn_number)
+        # [dn_number,sum(gt)]
         positive_idx = (
             torch.tensor(range(len(boxes))).long().cuda().unsqueeze(0).repeat(dn_number, 1)
         )
+        # 加上两个sum(gt)的间隔
         positive_idx += (torch.tensor(range(dn_number)) * len(boxes) * 2).long().cuda().unsqueeze(1)
+        # 拉平
         positive_idx = positive_idx.flatten()
+        # 负样本的位置就是加上sum(gt)的间隔
+        # 总间隔是2*sum(gt),前面一半是正样本，后面一本是负样本
         negative_idx = positive_idx + len(boxes)
+
         if box_noise_scale > 0:
             known_bbox_ = torch.zeros_like(known_bboxs)
+            # 中心坐标减掉宽高的一半，左上的边界点
             known_bbox_[:, :2] = known_bboxs[:, :2] - known_bboxs[:, 2:] / 2
+            # 中心坐标加上宽高的一半，右下的边界点
             known_bbox_[:, 2:] = known_bboxs[:, :2] + known_bboxs[:, 2:] / 2
 
             diff = torch.zeros_like(known_bboxs)
+            # 宽高的一半放到中心坐标的位置 为了计算偏移量
             diff[:, :2] = known_bboxs[:, 2:] / 2
+            # 宽高是宽高的一半
             diff[:, 2:] = known_bboxs[:, 2:] / 2
 
+            # -1 1 表示相减或者相加
+            # torch.randint_like(known_bboxs, low=0, high=2) 选出的值都是0 1这两种值
+            # torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0 选出的值是-1 或者 1
             rand_sign = (
                     torch.randint_like(known_bboxs, low=0, high=2, dtype=torch.float32) * 2.0 - 1.0
             )
+            # 0-1内的值
             rand_part = torch.rand_like(known_bboxs)
+            # 负样本位置的值+1, 负样本的偏离比正样本更多
             rand_part[negative_idx] += 1.0
+            # [2*gt count*dn number,4] 位置随机的乘上1 -1
             rand_part *= rand_sign
+            # 加上随机的偏移，左上，右下的点随机的进行了偏移
             known_bbox_ = known_bbox_ + torch.mul(rand_part, diff).cuda() * box_noise_scale
+            # 裁剪，防止溢出
             known_bbox_ = known_bbox_.clamp(min=0.0, max=1.0)
+            # 左上和右下点的和除2就是中心点坐标
             known_bbox_expand[:, :2] = (known_bbox_[:, :2] + known_bbox_[:, 2:]) / 2
+            # 右下减去左上的差值，就是高宽
             known_bbox_expand[:, 2:] = known_bbox_[:, 2:] - known_bbox_[:, :2]
-
+        # 这里的known_labels_expaned 已经被添加过随机的噪声了
         m = known_labels_expaned.long().to("cuda")
-        input_label_embed = label_enc(m)
+        # 将label tensor传入label_enc的embedding得到编码后的值, 将label的id传到，得到id的embedding
+        input_label_embed = label_enc(m) # [sum(gt)*200//max(gt),256]
+        # 对坐标取反函数  对应于特征图上的坐标
         input_bbox_embed = inverse_sigmoid(known_bbox_expand)
-
+        # pad_size = single_padding * 2 * dn_number , single_padding = max(gt)
+        # dn_number = dn_number // (int(max(known_num) * 2))
+        # pad_size = max(gt) * 2 * [200 // (int(max(known_num) * 2))] = 200
         padding_label = torch.zeros(pad_size, hidden_dim).cuda()
         padding_bbox = torch.zeros(pad_size, 4).cuda()
-
+        # [bs,n,256]
         input_query_label = padding_label.repeat(batch_size, 1, 1)
         input_query_bbox = padding_bbox.repeat(batch_size, 1, 1)
 
         map_known_indice = torch.tensor([]).to("cuda")
+
         if len(known_num):
+
             map_known_indice = torch.cat(
                 [torch.tensor(range(num)) for num in known_num]
             )  # [1,2, 1,2,3]
+            # 加上了偏移，这个偏移是这些batch中最大的gt的数量
             map_known_indice = torch.cat(
                 [map_known_indice + single_padding * i for i in range(2 * dn_number)]
             ).long()
-        if len(known_bid):
-            input_query_label[(known_bid.long(), map_known_indice)] = input_label_embed
-            input_query_bbox[(known_bid.long(), map_known_indice)] = input_bbox_embed
 
+        if len(known_bid):
+            # 替换对应的embed input_query_label第一个维度是bs，known_bid是标识的属于哪一个image
+            input_query_label[(known_bid.long(), map_known_indice)] = input_label_embed
+
+            input_query_bbox[(known_bid.long(), map_known_indice)] = input_bbox_embed
+        # 这里pad_size就是cdn总共的数量，包括了正负样本，num_queries是正常的query的数量
         tgt_size = pad_size + num_queries
+
         attn_mask = torch.ones(tgt_size, tgt_size).to("cuda") < 0
+
         # match query cannot see the reconstruct
         attn_mask[pad_size:, :pad_size] = True
+
         # reconstruct cannot see each other
         for i in range(dn_number):
             if i == 0:
+                # 第一组
+                # 看不到他后面的所有
                 attn_mask[
                 single_padding * 2 * i: single_padding * 2 * (i + 1),
                 single_padding * 2 * (i + 1): pad_size,
                 ] = True
             if i == dn_number - 1:
+                # 最后一组
+                # 看不到他前面的所有
                 attn_mask[
                 single_padding * 2 * i: single_padding * 2 * (i + 1), : single_padding * i * 2
                 ] = True
             else:
+                # 中间组
+                # 看不到他后面的
                 attn_mask[
                 single_padding * 2 * i: single_padding * 2 * (i + 1),
                 single_padding * 2 * (i + 1): pad_size,
                 ] = True
+                # 也看不到他前面的
                 attn_mask[
                 single_padding * 2 * i: single_padding * 2 * (i + 1), : single_padding * 2 * i
                 ] = True
