@@ -59,26 +59,26 @@ class DNDETR(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone: nn.Module,
-        in_features: List[str],
-        in_channels: int,
-        position_embedding: nn.Module,
-        transformer: nn.Module,
-        embed_dim: int,
-        num_classes: int,
-        num_queries: int,
-        criterion: nn.Module,
-        aux_loss: bool = True,
-        pixel_mean: List[float] = [123.675, 116.280, 103.530],
-        pixel_std: List[float] = [58.395, 57.120, 57.375],
-        freeze_anchor_box_centers: bool = True,
-        select_box_nums_for_evaluation: int = 300,
-        denoising_groups: int = 5,
-        label_noise_prob: float = 0.2,
-        box_noise_scale: float = 0.4,
-        with_indicator: bool = True,
-        device="cuda",
+            self,
+            backbone: nn.Module,
+            in_features: List[str],
+            in_channels: int,
+            position_embedding: nn.Module,
+            transformer: nn.Module,
+            embed_dim: int,
+            num_classes: int,
+            num_queries: int,
+            criterion: nn.Module,
+            aux_loss: bool = True,
+            pixel_mean: List[float] = [123.675, 116.280, 103.530],
+            pixel_std: List[float] = [58.395, 57.120, 57.375],
+            freeze_anchor_box_centers: bool = True,
+            select_box_nums_for_evaluation: int = 300,
+            denoising_groups: int = 5,
+            label_noise_prob: float = 0.2,
+            box_noise_scale: float = 0.4,
+            with_indicator: bool = True,
+            device="cuda",
     ):
         super(DNDETR, self).__init__()
         # define backbone and position embedding module
@@ -100,16 +100,18 @@ class DNDETR(nn.Module):
             box_noise_scale=box_noise_scale,
             with_indicator=with_indicator,
         )
-        self.denoising_groups = denoising_groups
-        self.label_noise_prob = label_noise_prob
-        self.box_noise_scale = box_noise_scale
+        self.denoising_groups = denoising_groups  # 5
+        self.label_noise_prob = label_noise_prob  # 0.2
+        self.box_noise_scale = box_noise_scale  # 0.4
 
         # define leanable anchor boxes and transformer module
         self.transformer = transformer
+        # 使用的是DAB DETR
         self.anchor_box_embed = nn.Embedding(num_queries, 4)
         self.num_queries = num_queries
 
         # whether to freeze the initilized anchor box centers during training
+        # todo
         self.freeze_anchor_box_centers = freeze_anchor_box_centers
 
         # define classification head and box head
@@ -208,10 +210,12 @@ class DNDETR(nn.Module):
 
         # for vallina dn-detr, label queries in the matching part is encoded as "no object" (the last class)
         # in the label encoder.
+
         matching_label_query = self.denoising_generator.label_encoder(
             torch.tensor(self.num_classes).to(self.device)
         ).repeat(self.num_queries, 1)
         indicator_for_matching_part = torch.zeros([self.num_queries, 1]).to(self.device)
+        # 最后一位补0
         matching_label_query = torch.cat(
             [matching_label_query, indicator_for_matching_part], 1
         ).repeat(batch_size, 1, 1)
@@ -225,6 +229,7 @@ class DNDETR(nn.Module):
             max_gt_num_per_image = 0
         else:
             # generate denoising queries and attention masks
+            # 生成去噪查询和注意力mask
             (
                 noised_label_queries,
                 noised_box_queries,
@@ -278,7 +283,7 @@ class DNDETR(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -340,7 +345,7 @@ class DNDETR(nn.Module):
         boxes = torch.gather(box_pred, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         for i, (scores_per_image, labels_per_image, box_pred_per_image, image_size) in enumerate(
-            zip(scores, labels, boxes, image_sizes)
+                zip(scores, labels, boxes, image_sizes)
         ):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))
@@ -356,7 +361,9 @@ class DNDETR(nn.Module):
             h, w = targets_per_image.image_size
             image_size_xyxy = torch.as_tensor([w, h, w, h], dtype=torch.float, device=self.device)
             gt_classes = targets_per_image.gt_classes
+            # 变成相对值
             gt_boxes = targets_per_image.gt_boxes.tensor / image_size_xyxy
+            # 变成xywh
             gt_boxes = box_xyxy_to_cxcywh(gt_boxes)
             new_targets.append({"labels": gt_classes, "boxes": gt_boxes})
         return new_targets

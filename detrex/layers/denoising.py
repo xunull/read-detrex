@@ -20,9 +20,9 @@ from detrex.utils import inverse_sigmoid
 
 
 def apply_label_noise(
-    labels: torch.Tensor,
-    label_noise_prob: float = 0.2,
-    num_classes: int = 80,
+        labels: torch.Tensor,
+        label_noise_prob: float = 0.2,
+        num_classes: int = 80,
 ):
     """
     Args:
@@ -44,8 +44,8 @@ def apply_label_noise(
 
 
 def apply_box_noise(
-    boxes: torch.Tensor,
-    box_noise_scale: float = 0.4,
+        boxes: torch.Tensor,
+        box_noise_scale: float = 0.4,
 ):
     """
     Args:
@@ -77,14 +77,14 @@ class GenerateDNQueries(nn.Module):
     """
 
     def __init__(
-        self,
-        num_queries: int = 300,
-        num_classes: int = 80,
-        label_embed_dim: int = 256,
-        denoising_groups: int = 5,
-        label_noise_prob: float = 0.2,
-        box_noise_scale: float = 0.4,
-        with_indicator: bool = False,
+            self,
+            num_queries: int = 300,
+            num_classes: int = 80,
+            label_embed_dim: int = 256,
+            denoising_groups: int = 5,
+            label_noise_prob: float = 0.2,
+            box_noise_scale: float = 0.4,
+            with_indicator: bool = False,
     ):
         super(GenerateDNQueries, self).__init__()
         self.num_queries = num_queries
@@ -97,6 +97,7 @@ class GenerateDNQueries(nn.Module):
 
         # leave one dim for indicator mentioned in DN-DETR
         if with_indicator:
+            # 这里少一位，缺少的一位为了标识是不是去噪的
             self.label_encoder = nn.Embedding(num_classes, label_embed_dim - 1)
         else:
             self.label_encoder = nn.Embedding(num_classes, label_embed_dim)
@@ -110,29 +111,29 @@ class GenerateDNQueries(nn.Module):
         for i in range(self.denoising_groups):
             if i == 0:
                 attn_mask[
-                    max_gt_num_per_image * i : max_gt_num_per_image * (i + 1),
-                    max_gt_num_per_image * (i + 1) : noised_query_nums,
+                max_gt_num_per_image * i: max_gt_num_per_image * (i + 1),
+                max_gt_num_per_image * (i + 1): noised_query_nums,
                 ] = True
             if i == self.denoising_groups - 1:
                 attn_mask[
-                    max_gt_num_per_image * i : max_gt_num_per_image * (i + 1),
-                    : max_gt_num_per_image * i,
+                max_gt_num_per_image * i: max_gt_num_per_image * (i + 1),
+                : max_gt_num_per_image * i,
                 ] = True
             else:
                 attn_mask[
-                    max_gt_num_per_image * i : max_gt_num_per_image * (i + 1),
-                    max_gt_num_per_image * (i + 1) : noised_query_nums,
+                max_gt_num_per_image * i: max_gt_num_per_image * (i + 1),
+                max_gt_num_per_image * (i + 1): noised_query_nums,
                 ] = True
                 attn_mask[
-                    max_gt_num_per_image * i : max_gt_num_per_image * (i + 1),
-                    : max_gt_num_per_image * i,
+                max_gt_num_per_image * i: max_gt_num_per_image * (i + 1),
+                : max_gt_num_per_image * i,
                 ] = True
         return attn_mask
 
     def forward(
-        self,
-        gt_labels_list,
-        gt_boxes_list,
+            self,
+            gt_labels_list,
+            gt_boxes_list,
     ):
         """
         Args:
@@ -243,13 +244,13 @@ class GenerateDNQueries(nn.Module):
 
 class GenerateCDNQueries(nn.Module):
     def __init__(
-        self,
-        num_queries: int = 300,
-        num_classes: int = 80,
-        label_embed_dim: int = 256,
-        denoising_nums: int = 100,
-        label_noise_prob: float = 0.5,
-        box_noise_scale: float = 1.0,
+            self,
+            num_queries: int = 300,
+            num_classes: int = 80,
+            label_embed_dim: int = 256,
+            denoising_nums: int = 100,
+            label_noise_prob: float = 0.5,
+            box_noise_scale: float = 1.0,
     ):
         super(GenerateCDNQueries, self).__init__()
         self.num_queries = num_queries
@@ -258,13 +259,12 @@ class GenerateCDNQueries(nn.Module):
         self.denoising_nums = denoising_nums
         self.label_noise_prob = label_noise_prob
         self.box_noise_scale = box_noise_scale
-        
+
         self.label_encoder = nn.Embedding(num_classes, label_embed_dim)
-    
+
     def forward(
-        self,
-        gt_labels_list,
-        gt_boxes_list,
+            self,
+            gt_labels_list,
+            gt_boxes_list,
     ):
         denoising_nums = self.denoising_nums * 2
-        

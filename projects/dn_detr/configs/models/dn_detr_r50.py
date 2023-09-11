@@ -84,10 +84,12 @@ model = L(DNDETR)(
     pixel_mean=[123.675, 116.280, 103.530],
     pixel_std=[58.395, 57.120, 57.375],
     select_box_nums_for_evaluation=300,
+    # 这四个是去噪相关的属性
     denoising_groups=5,
     label_noise_prob=0.2,
     box_noise_scale=0.4,
     with_indicator=True,
+
     device="cuda",
 )
 
