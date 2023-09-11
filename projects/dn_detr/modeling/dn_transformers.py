@@ -31,16 +31,16 @@ from detrex.utils.misc import inverse_sigmoid
 
 class DNDetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.0,
-        activation: nn.Module = nn.PReLU(),
-        num_layers: int = None,
-        post_norm: bool = False,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.0,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.0,
+            activation: nn.Module = nn.PReLU(),
+            num_layers: int = None,
+            post_norm: bool = False,
+            batch_first: bool = False,
     ):
         super(DNDetrTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -71,16 +71,16 @@ class DNDetrTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         for layer in self.layers:
@@ -103,19 +103,20 @@ class DNDetrTransformerEncoder(TransformerLayerSequence):
 
 class DNDetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.0,
-        activation: nn.Module = nn.PReLU(),
-        num_layers: int = None,
-        modulate_hw_attn: bool = True,
-        post_norm: bool = True,
-        return_intermediate: bool = True,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.0,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.0,
+            activation: nn.Module = nn.PReLU(),
+            num_layers: int = None,
+            modulate_hw_attn: bool = True,
+            post_norm: bool = True,
+            return_intermediate: bool = True,
+            batch_first: bool = False,
     ):
+        # 与DAB-DETR的transformer decoder相同
         super(DNDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
                 attn=[
@@ -165,17 +166,17 @@ class DNDetrTransformerDecoder(TransformerLayerSequence):
             self.layers[idx + 1].attentions[1].query_pos_proj = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        anchor_box_embed=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            anchor_box_embed=None,
+            **kwargs,
     ):
         intermediate = []
 
@@ -184,25 +185,32 @@ class DNDetrTransformerDecoder(TransformerLayerSequence):
 
         for idx, layer in enumerate(self.layers):
             obj_center = reference_points[..., : self.embed_dim]
+            # 高频位置编码
             query_sine_embed = get_sine_pos_embed(obj_center)
+            # DAB图5中最下面的MLP
             query_pos = self.ref_point_head(query_sine_embed)
 
             # do not apply transform in position in the first decoder layer
             if idx == 0:
                 position_transform = 1
             else:
+                # conditional detr中的 T FFN
+                # DAB图5中的中间两个MLP的左边的MLP
                 position_transform = self.query_scale(query)
 
             # apply position transform
             query_sine_embed = query_sine_embed[..., : self.embed_dim] * position_transform
 
             if self.modulate_hw_attn:
+                # DAB图5中的中间两个MLP的右边MLP
                 ref_hw_cond = self.ref_anchor_head(query).sigmoid()
-                query_sine_embed[..., self.embed_dim // 2 :] *= (
-                    ref_hw_cond[..., 0] / obj_center[..., 2]
+                # DAB公式6的Xref
+                query_sine_embed[..., self.embed_dim // 2:] *= (
+                        ref_hw_cond[..., 0] / obj_center[..., 2]
                 ).unsqueeze(-1)
+                # DAB公式6的Yref
                 query_sine_embed[..., : self.embed_dim // 2] *= (
-                    ref_hw_cond[..., 1] / obj_center[..., 3]
+                        ref_hw_cond[..., 1] / obj_center[..., 3]
                 ).unsqueeze(-1)
 
             query = layer(
@@ -221,12 +229,15 @@ class DNDetrTransformerDecoder(TransformerLayerSequence):
 
             # iter update
             if self.bbox_embed is not None:
+                # 将decoder的输出经过坐标头，得到坐标偏移量修正
                 temp = self.bbox_embed(query)
+                # 进行坐标修正
                 temp[..., : self.embed_dim] += inverse_sigmoid(reference_points)
                 new_reference_points = temp[..., : self.embed_dim].sigmoid()
 
                 if idx != self.num_layers - 1:
                     refpoints.append(new_reference_points)
+                # 动态anchor的处理，每次decoder使用的，都是在上一次修正后的
                 reference_points = new_reference_points.detach()
 
             if self.return_intermediate:
@@ -270,7 +281,16 @@ class DNDetrTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, mask, anchor_box_embed, pos_embed, target=None, attn_mask=None):
+    def forward(self,
+                x,
+                mask,
+                # dab需要的
+                anchor_box_embed,
+                # 空间位置编码
+                pos_embed,
+                # 在以往的transformer中，都不需要这个
+                target=None,
+                attn_mask=None):
         bs, c, h, w = x.shape
         x = x.view(bs, c, -1).permute(2, 0, 1)
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)

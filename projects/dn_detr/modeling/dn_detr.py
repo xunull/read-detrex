@@ -215,7 +215,7 @@ class DNDETR(nn.Module):
             torch.tensor(self.num_classes).to(self.device)
         ).repeat(self.num_queries, 1)
         indicator_for_matching_part = torch.zeros([self.num_queries, 1]).to(self.device)
-        # 最后一位补0
+        # 最后一位补0，噪声的label最后补的是1
         matching_label_query = torch.cat(
             [matching_label_query, indicator_for_matching_part], 1
         ).repeat(batch_size, 1, 1)
@@ -237,7 +237,7 @@ class DNDETR(nn.Module):
                 denoising_groups,
                 max_gt_num_per_image,
             ) = self.denoising_generator(gt_labels_list, gt_boxes_list)
-
+            # 噪声样本在前
             # concate dn queries and matching queries as input
             input_label_query = torch.cat(
                 [noised_label_queries, matching_label_query], 1
@@ -248,6 +248,7 @@ class DNDETR(nn.Module):
             features,
             img_masks,
             input_box_query,
+            # 空间位置编码
             pos_embed,
             target=input_label_query,
             attn_mask=[attn_mask, None],  # None mask for cross attention
@@ -294,15 +295,19 @@ class DNDETR(nn.Module):
     def dn_post_process(self, outputs_class, outputs_coord, output):
         if output and output["max_gt_num_per_image"] > 0:
             padding_size = output["max_gt_num_per_image"] * output["denoising_groups"]
+            # 前面的这些是去噪的部分
             output_known_class = outputs_class[:, :, :padding_size, :]
             output_known_coord = outputs_coord[:, :, :padding_size, :]
+            # 后面这些是正常的300个预测的部分
             outputs_class = outputs_class[:, :, padding_size:, :]
             outputs_coord = outputs_coord[:, :, padding_size:, :]
 
             out = {"pred_logits": output_known_class[-1], "pred_boxes": output_known_coord[-1]}
             if self.aux_loss:
                 out["aux_outputs"] = self._set_aux_loss(output_known_class, output_known_coord)
+            # 在output上进行了修改
             output["denoising_output"] = out
+        # 返回这俩还是网络自己预测的，不包括去噪部分的
         return outputs_class, outputs_coord
 
     @torch.jit.unused

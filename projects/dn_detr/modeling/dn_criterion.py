@@ -36,7 +36,7 @@ class DNCriterion(SetCriterion):
         aux_num = 0
         if "aux_outputs" in outputs:
             aux_num = len(outputs["aux_outputs"])
-
+        # 计算去噪部分的loss
         dn_losses = self.calculate_dn_loss(outputs, targets, aux_num, num_boxes)
         losses.update(dn_losses)
 
