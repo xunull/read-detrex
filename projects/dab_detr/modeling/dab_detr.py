@@ -55,22 +55,22 @@ class DABDETR(nn.Module):
     """
 
     def __init__(
-        self,
-        backbone: nn.Module,
-        in_features: List[str],
-        in_channels: int,
-        position_embedding: nn.Module,
-        transformer: nn.Module,
-        embed_dim: int,
-        num_classes: int,
-        num_queries: int,
-        criterion: nn.Module,
-        aux_loss: bool = True,
-        pixel_mean: List[float] = [123.675, 116.280, 103.530],
-        pixel_std: List[float] = [58.395, 57.120, 57.375],
-        freeze_anchor_box_centers: bool = True,
-        select_box_nums_for_evaluation: int = 300,
-        device: str = "cuda",
+            self,
+            backbone: nn.Module,
+            in_features: List[str],
+            in_channels: int,
+            position_embedding: nn.Module,
+            transformer: nn.Module,
+            embed_dim: int,
+            num_classes: int,
+            num_queries: int,
+            criterion: nn.Module,
+            aux_loss: bool = True,
+            pixel_mean: List[float] = [123.675, 116.280, 103.530],
+            pixel_std: List[float] = [58.395, 57.120, 57.375],
+            freeze_anchor_box_centers: bool = True,
+            select_box_nums_for_evaluation: int = 300,
+            device: str = "cuda",
     ):
         super(DABDETR, self).__init__()
         # define backbone and position embedding module
@@ -84,6 +84,7 @@ class DABDETR(nn.Module):
 
         # define leanable anchor boxes and transformer module
         self.transformer = transformer
+        # xywh
         self.anchor_box_embed = nn.Embedding(num_queries, 4)
 
         # whether to freeze the initilized anchor box centers during training
@@ -170,9 +171,11 @@ class DABDETR(nn.Module):
         features = self.backbone(images.tensor)[self.in_features[-1]]
         features = self.input_proj(features)
         img_masks = F.interpolate(img_masks[None], size=features.shape[-2:]).to(torch.bool)[0]
+        # 空间位置编码
         pos_embed = self.position_embedding(img_masks)
 
         # dynamic anchor boxes
+        # [n,4]
         dynamic_anchor_boxes = self.anchor_box_embed.weight
 
         # hidden_states: transformer output hidden feature
@@ -207,7 +210,7 @@ class DABDETR(nn.Module):
             results = self.inference(box_cls, box_pred, images.image_sizes)
             processed_results = []
             for results_per_image, input_per_image, image_size in zip(
-                results, batched_inputs, images.image_sizes
+                    results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
@@ -255,7 +258,7 @@ class DABDETR(nn.Module):
         boxes = torch.gather(box_pred, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         for i, (scores_per_image, labels_per_image, box_pred_per_image, image_size) in enumerate(
-            zip(scores, labels, boxes, image_sizes)
+                zip(scores, labels, boxes, image_sizes)
         ):
             result = Instances(image_size)
             result.pred_boxes = Boxes(box_cxcywh_to_xyxy(box_pred_per_image))

@@ -119,12 +119,14 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
         super(DabDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
                 attn=[
+                    # 用的conditional
                     ConditionalSelfAttention(
                         embed_dim=embed_dim,
                         num_heads=num_heads,
                         attn_drop=attn_dropout,
                         batch_first=batch_first,
                     ),
+                    # 用的conditional
                     ConditionalCrossAttention(
                         embed_dim=embed_dim,
                         num_heads=num_heads,
@@ -180,27 +182,35 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
         intermediate = []
 
         reference_boxes = anchor_box_embed.sigmoid()
+        # 现在是最初始的点位
         intermediate_ref_boxes = [reference_boxes]
 
         for idx, layer in enumerate(self.layers):
             obj_center = reference_boxes[..., : self.embed_dim]
+            # 高频位置编码
             query_sine_embed = get_sine_pos_embed(obj_center)
+            # 图5中最下面的MLP
             query_pos = self.ref_point_head(query_sine_embed)
 
             # do not apply transform in position in the first decoder layer
             if idx == 0:
                 position_transform = 1
             else:
+                # conditional detr中的 T FFN
+                # 图5中的中间两个MLP的左边的MLP
                 position_transform = self.query_scale(query)
 
             # apply position transform
             query_sine_embed = query_sine_embed[..., : self.embed_dim] * position_transform
 
             if self.modulate_hw_attn:
+                # 图5中的中间两个MLP的右边MLP
                 ref_hw_cond = self.ref_anchor_head(query).sigmoid()
+                # 公式6的Xref
                 query_sine_embed[..., self.embed_dim // 2:] *= (
                         ref_hw_cond[..., 0] / obj_center[..., 2]
                 ).unsqueeze(-1)
+                # 公式6的Yref
                 query_sine_embed[..., : self.embed_dim // 2] *= (
                         ref_hw_cond[..., 1] / obj_center[..., 3]
                 ).unsqueeze(-1)
@@ -222,12 +232,15 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
             # update anchor boxes after each decoder layer using shared box head.
             if self.bbox_embed is not None:
                 # predict offsets and added to the input normalized anchor boxes.
+                # 将decoder的输出经过坐标头，得到坐标偏移量修正
                 offsets = self.bbox_embed(query)
+                # 进行坐标修正
                 offsets[..., : self.embed_dim] += inverse_sigmoid(reference_boxes)
                 new_reference_boxes = offsets[..., : self.embed_dim].sigmoid()
 
                 if idx != self.num_layers - 1:
                     intermediate_ref_boxes.append(new_reference_boxes)
+                # 动态anchor的处理，每次decoder使用的，都是在上一次修正后的
                 reference_boxes = new_reference_boxes.detach()
 
             if self.return_intermediate:
