@@ -469,10 +469,14 @@ class DeformableDetrTransformer(nn.Module):
             reference_points = topk_coords_unact.sigmoid()
             # 作为初始的点位 [bs,300,4]
             init_reference_out = reference_points
+
+            # topk_coords_unact 在上面已经detach
+            # get_proposal_pos_embed 将输出的维度256->512 pos_trans 521->512
             pos_trans_out = self.pos_trans_norm(
                 # get_proposal_pos_embed 转化成位置编码的形式
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact))
             )
+            # 分类出目标查询的位置查询，以及内容查询
             query_pos, query = torch.split(pos_trans_out, c, dim=2)
         else:
             query_pos, query = torch.split(query_embed, c, dim=1)

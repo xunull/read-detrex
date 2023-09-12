@@ -29,18 +29,19 @@ from detrex.utils import inverse_sigmoid
 
 from fairscale.nn.checkpoint import checkpoint_wrapper
 
+
 class DINOTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        feedforward_dim: int = 1024,
-        attn_dropout: float = 0.1,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        post_norm: bool = False,
-        num_feature_levels: int = 4,
-        use_checkpoint: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            feedforward_dim: int = 1024,
+            attn_dropout: float = 0.1,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            post_norm: bool = False,
+            num_feature_levels: int = 4,
+            use_checkpoint: bool = False,
     ):
         super(DINOTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -77,16 +78,16 @@ class DINOTransformerEncoder(TransformerLayerSequence):
                 layer = checkpoint_wrapper(layer)
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         # 6层循环
@@ -109,17 +110,17 @@ class DINOTransformerEncoder(TransformerLayerSequence):
 
 class DINOTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        feedforward_dim: int = 1024,
-        attn_dropout: float = 0.1,
-        ffn_dropout: float = 0.1,
-        num_layers: int = 6,
-        return_intermediate: bool = True,
-        num_feature_levels: int = 4,
-        look_forward_twice: bool = True,
-        use_checkpoint: bool = True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            feedforward_dim: int = 1024,
+            attn_dropout: float = 0.1,
+            ffn_dropout: float = 0.1,
+            num_layers: int = 6,
+            return_intermediate: bool = True,
+            num_feature_levels: int = 4,
+            look_forward_twice: bool = True,
+            use_checkpoint: bool = True,
     ):
         super(DINOTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -164,18 +165,20 @@ class DINOTransformerDecoder(TransformerLayerSequence):
                 layer = checkpoint_wrapper(layer)
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        reference_points=None,  # num_queries, 4. normalized.
-        valid_ratios=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            # DINO没有传入
+            query_pos=None,
+            # 如Deformable DETR一样，没有传入
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            reference_points=None,  # num_queries, 4. normalized.
+            valid_ratios=None,
+            **kwargs,
     ):
 
         output = query
@@ -188,13 +191,15 @@ class DINOTransformerDecoder(TransformerLayerSequence):
         for layer_idx, layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = (
-                    reference_points[:, :, None]
-                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                        reference_points[:, :, None]
+                        * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             else:
                 assert reference_points.shape[-1] == 2
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
-
+            # 参考点位得出高频编码的形式
+            # 这个地方的实现与原版的DINO不同
+            # 原版的DINO这个地方使用的是与DN，DAB 相同的方式
             query_sine_embed = get_sine_pos_embed(reference_points_input[:, :, 0, :])
             query_pos = self.ref_point_head(query_sine_embed)
 
@@ -203,7 +208,13 @@ class DINOTransformerDecoder(TransformerLayerSequence):
                 key,
                 value,
                 query_pos=query_pos,
+                # 空间位置编码，decoder的交叉注意力没有使用
                 key_pos=key_pos,
+                # 这个是Deformable DETR没有使用的
+                # 在Conditional DETR，DAB DETR，DN DETR中使用
+                # 这个传入MultiScaleDeformableAttention好像没有被使用
+                # 在DN DAB中用的是ConditionalCrossAttention
+                # 不过在原版的DINO中，这个参数也没有使用
                 query_sine_embed=query_sine_embed,
                 attn_masks=attn_masks,
                 query_key_padding_mask=query_key_padding_mask,
@@ -215,20 +226,26 @@ class DINOTransformerDecoder(TransformerLayerSequence):
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[layer_idx](output)
                 if reference_points.shape[-1] == 4:
+                    # 进行修正
                     new_reference_points = tmp + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
                 else:
                     assert reference_points.shape[-1] == 2
                     new_reference_points = tmp
+                    # 进行修正
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
+                # 每一层使用的reference_points都是修正更新后的
                 reference_points = new_reference_points.detach()
 
             if self.return_intermediate:
                 intermediate.append(self.norm(output))
+
                 if self.look_forward_twice:
+                    # look_forward_twice 就是不要断掉梯度回传
                     intermediate_reference_points.append(new_reference_points)
                 else:
+                    # 这里的reference_points 是被detach的，因此梯度无法往前继续传递了
                     intermediate_reference_points.append(reference_points)
 
         if self.return_intermediate:
@@ -249,12 +266,12 @@ class DINOTransformer(nn.Module):
     """
 
     def __init__(
-        self,
-        encoder=None,
-        decoder=None,
-        num_feature_levels=4,
-        two_stage_num_proposals=900,
-        learnt_init_query=True,
+            self,
+            encoder=None,
+            decoder=None,
+            num_feature_levels=4,
+            two_stage_num_proposals=900,
+            learnt_init_query=True,
     ):
         super(DINOTransformer, self).__init__()
         self.encoder = encoder
@@ -266,8 +283,10 @@ class DINOTransformer(nn.Module):
 
         self.level_embeds = nn.Parameter(torch.Tensor(self.num_feature_levels, self.embed_dim))
         self.learnt_init_query = learnt_init_query
+        # Embedding 维度是proposal的数量，和dim
         if self.learnt_init_query:
             self.tgt_embed = nn.Embedding(self.two_stage_num_proposals, self.embed_dim)
+
         self.enc_output = nn.Linear(self.embed_dim, self.embed_dim)
         self.enc_output_norm = nn.LayerNorm(self.embed_dim)
 
@@ -287,7 +306,7 @@ class DINOTransformer(nn.Module):
         proposals = []
         _cur = 0
         for lvl, (H, W) in enumerate(spatial_shapes):
-            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H * W)].view(N, H, W, 1)
+            mask_flatten_ = memory_padding_mask[:, _cur: (_cur + H * W)].view(N, H, W, 1)
             valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
@@ -299,7 +318,7 @@ class DINOTransformer(nn.Module):
 
             scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(N, -1, -1, -1) + 0.5) / scale
-            wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
+            wh = torch.ones_like(grid) * 0.05 * (2.0 ** lvl)
             proposal = torch.cat((grid, wh), -1).view(N, -1, 4)
             proposals.append(proposal)
             _cur += H * W
@@ -322,7 +341,9 @@ class DINOTransformer(nn.Module):
 
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
-        """Get the reference points used in decoder.
+        """
+        与Deformable DETR相同
+        Get the reference points used in decoder.
 
         Args:
             spatial_shapes (Tensor): The shape of all
@@ -363,20 +384,20 @@ class DINOTransformer(nn.Module):
         return valid_ratio
 
     def forward(
-        self,
-        multi_level_feats,
-        multi_level_masks,
-        multi_level_pos_embeds,
-        query_embed,
-        attn_masks,
-        **kwargs,
+            self,
+            multi_level_feats,
+            multi_level_masks,
+            multi_level_pos_embeds,
+            query_embed,
+            attn_masks,
+            **kwargs,
     ):
         feat_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
         for lvl, (feat, mask, pos_embed) in enumerate(
-            zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
+                zip(multi_level_feats, multi_level_masks, multi_level_pos_embeds)
         ):
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
@@ -411,6 +432,7 @@ class DINOTransformer(nn.Module):
             query_pos=lvl_pos_embed_flatten,
             query_key_padding_mask=mask_flatten,
             spatial_shapes=spatial_shapes,
+            # 参考点位
             reference_points=reference_points,  # bs, num_token, num_level, 2
             level_start_index=level_start_index,
             valid_ratios=valid_ratios,
@@ -422,32 +444,44 @@ class DINOTransformer(nn.Module):
         )
         # output_memory: bs, num_tokens, c
         # output_proposals: bs, num_tokens, 4. unsigmoided.
-
+        # 经过分类头
         enc_outputs_class = self.decoder.class_embed[self.decoder.num_layers](output_memory)
+        # 经过坐标头
         enc_outputs_coord_unact = (
-            self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
+                self.decoder.bbox_embed[self.decoder.num_layers](output_memory) + output_proposals
         )  # unsigmoided.
 
         topk = self.two_stage_num_proposals
+
         topk_proposals = torch.topk(enc_outputs_class.max(-1)[0], topk, dim=1)[1]
 
         # extract region proposal boxes
+        # 对应的box
         topk_coords_unact = torch.gather(
             enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
         )  # unsigmoided.
+        # 脱离
         reference_points = topk_coords_unact.detach().sigmoid()
+
+        # 在训练是，query_embed 是噪声，第一个是label，第二个是box
+        # 将噪声和初始的点位拼接，噪声在前
         if query_embed[1] is not None:
             reference_points = torch.cat([query_embed[1].sigmoid(), reference_points], 1)
+
         init_reference_out = reference_points
 
         # extract region features
+        # 提取出相应的特征
         target_unact = torch.gather(
             output_memory, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1])
         )
         if self.learnt_init_query:
+            # Mixed Query Selection 保持内容查询是网络中的可学习参数
             target = self.tgt_embed.weight[None].repeat(bs, 1, 1)
         else:
             target = target_unact.detach()
+
+        # 在训练是，query_embed 是噪声，第一个是label，第二个是box
         if query_embed[0] is not None:
             target = torch.cat([query_embed[0], target], 1)
 
@@ -456,6 +490,7 @@ class DINOTransformer(nn.Module):
             query=target,  # bs, num_queries, embed_dims
             key=memory,  # bs, num_tokens, embed_dims
             value=memory,  # bs, num_tokens, embed_dims
+            # 这里没有了，因为论文中提到了Mixed Query Selection
             query_pos=None,
             key_padding_mask=mask_flatten,  # bs, num_tokens
             reference_points=reference_points,  # num_queries, 4
