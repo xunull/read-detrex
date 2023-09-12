@@ -205,7 +205,8 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
             if self.return_intermediate:
                 intermediate.append(output)
                 # todo
-                # 多的改动 look_forward_twice
+                # look_forward_twice
+                # 如果使用，那么就保持梯度可以传递，否则，就使用断开的
                 intermediate_reference_points.append(
                     new_reference_points if self.look_forward_twice else reference_points
                 )
@@ -217,7 +218,7 @@ class HDeformableDetrTransformerDecoder(TransformerLayerSequence):
 
 
 # Transformer
-# 多了一个Mixed Query Selection (MQS)
+# 多了一个Mixed Query Selection (MQS), 在DINO中提出的那个
 class HDeformableDetrTransformer(nn.Module):
     """Transformer module for Deformable DETR
 
@@ -450,11 +451,14 @@ class HDeformableDetrTransformer(nn.Module):
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact))
             )
 
-            # todo
+
             if not self.mixed_selection:
+                # 如果不使用混合查询，那么都来至于encoder的输出
                 query_pos, query = torch.split(pos_trans_out, c, dim=2)
             else:
-                # todo
+                # 如果使用混合查询
+                # 那么内容查询还是保持为可以训练的网络参数
+                # 位置查询来源为encoder的输出相关
                 # query_pos here is the content embed for deformable DETR
                 query = query_embed.unsqueeze(0).expand(bs, -1, -1)
                 query_pos, _ = torch.split(pos_trans_out, c, dim=2)

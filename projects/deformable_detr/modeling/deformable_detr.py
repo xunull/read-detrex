@@ -193,7 +193,9 @@ class DeformableDETR(nn.Module):
             enc_outputs_class,
             enc_outputs_coord_unact,
         ) = self.transformer(
-            multi_level_feats, multi_level_masks, multi_level_position_embeddings,
+            multi_level_feats,
+            multi_level_masks,
+            multi_level_position_embeddings,
             query_embeds
         )
 

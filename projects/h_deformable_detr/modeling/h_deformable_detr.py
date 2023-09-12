@@ -25,7 +25,7 @@ from detrex.utils import inverse_sigmoid
 from detectron2.modeling import detector_postprocess
 from detectron2.structures import Boxes, ImageList, Instances
 
-
+# 原作者
 class HDeformableDETR(nn.Module):
     """Implements the Deformable DETR model.
 
@@ -95,6 +95,7 @@ class HDeformableDETR(nn.Module):
         # define learnable query embedding
         self.num_queries = num_queries
         if not as_two_stage:
+            # 如果使用two_stage，那么query的来源是encoder的memory topk
             self.query_embedding = nn.Embedding(num_queries, embed_dim * 2)
         elif mixed_selection:
             # todo
@@ -106,6 +107,7 @@ class HDeformableDETR(nn.Module):
         # define classification head and box head
         self.num_classes = num_classes
         self.class_embed = nn.Linear(embed_dim, num_classes)
+        # 3层，基本都是3层
         self.bbox_embed = MLP(embed_dim, embed_dim, 4, 3)
 
         # where to calculate auxiliary loss in criterion
@@ -211,7 +213,7 @@ class HDeformableDETR(nn.Module):
         if not self.as_two_stage or self.mixed_selection:
             query_embeds = self.query_embedding.weight[0: self.num_queries, :]
 
-        # todo
+
         # make attn mask
         """ attention mask to prevent information leakage
         """
@@ -296,6 +298,7 @@ class HDeformableDETR(nn.Module):
 
         if self.as_two_stage:
             enc_outputs_coord = enc_outputs_coord_unact.sigmoid()
+            # two_stage时，也需要对encoder的输出进行loss计算
             output["enc_outputs"] = {
                 "pred_logits": enc_outputs_class,
                 "pred_boxes": enc_outputs_coord,
