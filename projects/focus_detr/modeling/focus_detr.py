@@ -102,6 +102,7 @@ class FOCUS_DETR(nn.Module):
         self.criterion = criterion
 
         # denoising
+        # 将label id编码
         self.label_enc = nn.Embedding(num_classes, embed_dim)
         self.dn_number = dn_number
         self.label_noise_ratio = label_noise_ratio

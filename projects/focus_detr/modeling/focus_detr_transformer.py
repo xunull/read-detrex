@@ -325,11 +325,13 @@ class FOCUS_DETRTransformer(nn.Module):
         self.two_stage_num_proposals = two_stage_num_proposals
         self.embed_dim = self.encoder.embed_dim
         self.level_embeds = nn.Parameter(torch.Tensor(self.num_feature_levels, self.embed_dim))
+        # DINO那个
         self.learnt_init_query = learnt_init_query
         if self.learnt_init_query:
             self.tgt_embed = nn.Embedding(self.two_stage_num_proposals, self.embed_dim)
         self.enc_output = nn.Linear(self.embed_dim, self.embed_dim)
         self.enc_output_norm = nn.LayerNorm(self.embed_dim)
+
         # FTS
         self.enc_mask_predictor = MaskPredictor(self.embed_dim, self.embed_dim)
         self.init_weights()
@@ -472,6 +474,7 @@ class FOCUS_DETRTransformer(nn.Module):
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             feat_flatten.append(feat)
             mask_flatten.append(mask)
+
         feat_flatten = torch.cat(feat_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
@@ -617,6 +620,7 @@ class FOCUS_DETRTransformer(nn.Module):
             target = self.tgt_embed.weight[None].repeat(bs, 1, 1)
         else:
             target = target_unact.detach()
+
         if query_embed[0] is not None:
             target = torch.cat([query_embed[0], target], 1)
 
