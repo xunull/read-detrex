@@ -31,16 +31,16 @@ from .attention import GroupConditionalSelfAttention
 
 class GroupDetrTransformerEncoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.1,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.1,
-        activation: nn.Module = nn.PReLU(),
-        post_norm: bool = False,
-        num_layers: int = 6,
-        batch_first: bool = False,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.1,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.1,
+            activation: nn.Module = nn.PReLU(),
+            post_norm: bool = False,
+            num_layers: int = 6,
+            batch_first: bool = False,
     ):
         super(GroupDetrTransformerEncoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -70,16 +70,16 @@ class GroupDetrTransformerEncoder(TransformerLayerSequence):
             self.post_norm_layer = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
 
         for layer in self.layers:
@@ -101,18 +101,18 @@ class GroupDetrTransformerEncoder(TransformerLayerSequence):
 
 class GroupDetrTransformerDecoder(TransformerLayerSequence):
     def __init__(
-        self,
-        embed_dim: int = 256,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        feedforward_dim: int = 2048,
-        ffn_dropout: float = 0.0,
-        activation: nn.Module = nn.PReLU(),
-        group_nums: int = 11,
-        num_layers: int = None,
-        batch_first: bool = False,
-        post_norm: bool = True,
-        return_intermediate: bool = True,
+            self,
+            embed_dim: int = 256,
+            num_heads: int = 8,
+            attn_dropout: float = 0.0,
+            feedforward_dim: int = 2048,
+            ffn_dropout: float = 0.0,
+            activation: nn.Module = nn.PReLU(),
+            group_nums: int = 11,
+            num_layers: int = None,
+            batch_first: bool = False,
+            post_norm: bool = True,
+            return_intermediate: bool = True,
     ):
         super(GroupDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
@@ -160,16 +160,16 @@ class GroupDetrTransformerDecoder(TransformerLayerSequence):
             self.layers[idx + 1].attentions[1].query_pos_proj = None
 
     def forward(
-        self,
-        query,
-        key,
-        value,
-        query_pos=None,
-        key_pos=None,
-        attn_masks=None,
-        query_key_padding_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key,
+            value,
+            query_pos=None,
+            key_pos=None,
+            attn_masks=None,
+            query_key_padding_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
         intermediate = []
         reference_points_before_sigmoid = self.ref_point_head(
@@ -240,7 +240,11 @@ class GroupDetrTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, mask, query_embed, pos_embed):
+    def forward(self, x, mask,
+                # 目标查询
+                query_embed,
+                # 空间位置编码
+                pos_embed):
         bs, c, h, w = x.shape
         x = x.view(bs, c, -1).permute(2, 0, 1)
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)

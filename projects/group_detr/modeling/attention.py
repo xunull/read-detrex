@@ -37,14 +37,14 @@ class GroupConditionalSelfAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        attn_drop=0.0,
-        proj_drop=0.0,
-        group_nums=11,
-        batch_first=False,
-        **kwargs,
+            self,
+            embed_dim,
+            num_heads,
+            attn_drop=0.0,
+            proj_drop=0.0,
+            group_nums=11,
+            batch_first=False,
+            **kwargs,
     ):
         super(GroupConditionalSelfAttention, self).__init__()
         self.query_content_proj = nn.Linear(embed_dim, embed_dim)
@@ -59,20 +59,20 @@ class GroupConditionalSelfAttention(nn.Module):
         self.num_heads = num_heads
         self.embed_dim = embed_dim
         head_dim = embed_dim // num_heads
-        self.scale = head_dim**-0.5
+        self.scale = head_dim ** -0.5
         self.batch_first = batch_first
 
     def forward(
-        self,
-        query,
-        key=None,
-        value=None,
-        identity=None,
-        query_pos=None,
-        key_pos=None,
-        attn_mask=None,
-        key_padding_mask=None,
-        **kwargs,
+            self,
+            query,
+            key=None,
+            value=None,
+            identity=None,
+            query_pos=None,
+            key_pos=None,
+            attn_mask=None,
+            key_padding_mask=None,
+            **kwargs,
     ):
         """Forward function for `ConditionalSelfAttention`
 
@@ -120,7 +120,7 @@ class GroupConditionalSelfAttention(nn.Module):
                     )
 
         assert (
-            query_pos is not None and key_pos is not None
+                query_pos is not None and key_pos is not None
         ), "query_pos and key_pos must be passed into ConditionalAttention Module"
 
         # transpose (b n c) to (n b c) for attention calculation
@@ -147,6 +147,7 @@ class GroupConditionalSelfAttention(nn.Module):
 
         # hack in attention layer to implement group-detr
         if self.training:
+            # 类似于增大了bs
             q = torch.cat(q.split(N // self.group_nums, dim=0), dim=1)
             k = torch.cat(k.split(N // self.group_nums, dim=0), dim=1)
             v = torch.cat(v.split(N // self.group_nums, dim=0), dim=1)
