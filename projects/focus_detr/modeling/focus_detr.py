@@ -127,10 +127,11 @@ class FOCUS_DETR(nn.Module):
                 nn.init.constant_(neck_layer.bias, 0)
 
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
+        # 最后一个分类头给encoder使用
         num_pred = transformer.decoder.num_layers + 1
         self.class_embed = nn.ModuleList([copy.deepcopy(self.class_embed) for i in range(num_pred)])
 
-        # 每一个encoder都有一个MCSP
+        # 每一个encoder都有一个分类头，但是是共享的
         self.enhance_MCSP_layerlist = nn.ModuleList(
             [self.class_embed[transformer.encoder.num_layers] for i in range(transformer.encoder.num_layers)])
 

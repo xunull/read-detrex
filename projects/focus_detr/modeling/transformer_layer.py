@@ -341,7 +341,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
         # ('OESM', 'encoder_cross_attn', 'norm', 'ffn', 'norm')
         for layer in self.operation_order:
 
-            # encoder中没有self_attn了
+            # encoder中没有self_attn
             if layer == "self_attn":
 
                 temp_key = temp_value = query
@@ -362,16 +362,23 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                 identity = query
 
             elif layer == "OESM":
+                # Focus DETR encoer 增加的注意力计算
                 # 第一个 attention
+
                 ori_tgt = query
+                # 算法 2 3 行
                 # 最大的类别的分数和前景分数相乘
                 mc_score = score_tgt.max(-1)[0] * foreground_pre_layer
+                # 算法 4行
                 # bs, nq # 最大的300个 位置index
                 select_tgt_index = torch.topk(mc_score, self.topk_sa, dim=1)[1]
+                # 算法 5行
                 # 取出对应的query
                 select_tgt = torch.gather(query, 1, select_tgt_index.unsqueeze(-1).repeat(1, 1, 256))
-                # 取出对应的query index
+                # 算法 5行
+                # 取出对应的query_pos index
                 select_pos = torch.gather(query_pos, 1, select_tgt_index.unsqueeze(-1).repeat(1, 1, 256))
+
                 temp_key = temp_value = select_tgt
                 # 进行attention计算
                 tgt2 = self.attentions[attn_index](
@@ -385,6 +392,7 @@ class Focus_DETR_BaseTransformerLayer(nn.Module):
                     **kwargs,
                 )
                 tgt2 = self.norm2(tgt2)
+                # 算法 9行
                 # 更新query
                 query = ori_tgt.scatter(1, select_tgt_index.unsqueeze(-1).repeat(1, 1, tgt2.size(-1)), tgt2)
                 attn_index += 1

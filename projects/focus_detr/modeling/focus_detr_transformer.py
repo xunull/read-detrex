@@ -81,7 +81,8 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
         self.embed_dim = self.layers[0].embed_dim
         self.pre_norm = self.layers[0].pre_norm
 
-        # 论文中Multi-category score predictor章节的那个MLP
+        # 论文中Multi-category score predictor章节
+        # 就是一个分类头，各个encoder共享的
         self.enhance_MCSP = None
 
         if post_norm:
@@ -95,6 +96,7 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
 
             focus_token_nums,
             foreground_inds,
+
             reference_points,
             query,
             key,
@@ -121,17 +123,21 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
 
         # 6 层encoder
         for layer_id, layer in enumerate(self.layers):
-            # 从output中取出对应的token
+            # 从output中取出对应的前景token
             query = torch.gather(output, 1, foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, output.size(-1)))
+            # 取出相对应的query_pos
             query_pos = torch.gather(ori_pos, 1,
-                                     foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, query_pos.size(-1))) # 取出相对应的query_pos
+                                     foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, query_pos.size(-1)))
             # 取出前景分数值
             foreground_pre_layer = torch.gather(backbone_mask_prediction, 1, foreground_inds[layer_id])
+            # 取出参考点位
             reference_points = torch.gather(ori_reference_points.view(B_, N_, -1), 1,
                                             foreground_inds[layer_id].unsqueeze(-1).repeat(1, 1, S_ * P_)).view(B_, -1,
-                                                                                                                S_, P_) # 取出参考点位
+                                                                                                                S_,
+                                                                                                                P_)
             dropflag = False
             # 每个token属于class的分数 # [bs,x,80]
+            # 算法第一行
             score_tgt = self.enhance_MCSP[layer_id](query)
 
             query = layer(
@@ -149,11 +155,14 @@ class FOCUS_DETRTransformerEncoder(TransformerLayerSequence):
                 reference_points=reference_points,
                 **kwargs,
             )
+
             outputs = []
+            # 算法12行
             # for的是bs
             for i in range(foreground_inds[layer_id].shape[0]):
                 # focus_token_nums限制取token的最大数量
                 # 修改原始的output中token的内容
+                # 以foreground_inds的id，从query中取值，更新到output中
                 outputs.append(output[i].scatter(0, foreground_inds[layer_id][i][:focus_token_nums[i]].unsqueeze(
                     -1).repeat(1, query.size(-1)), query[i][:focus_token_nums[i]]))
 
@@ -325,15 +334,18 @@ class FOCUS_DETRTransformer(nn.Module):
         self.two_stage_num_proposals = two_stage_num_proposals
         self.embed_dim = self.encoder.embed_dim
         self.level_embeds = nn.Parameter(torch.Tensor(self.num_feature_levels, self.embed_dim))
+
         # DINO那个
         self.learnt_init_query = learnt_init_query
         if self.learnt_init_query:
             self.tgt_embed = nn.Embedding(self.two_stage_num_proposals, self.embed_dim)
+
         self.enc_output = nn.Linear(self.embed_dim, self.embed_dim)
         self.enc_output_norm = nn.LayerNorm(self.embed_dim)
 
         # FTS
         self.enc_mask_predictor = MaskPredictor(self.embed_dim, self.embed_dim)
+
         self.init_weights()
 
     def init_weights(self):
@@ -367,6 +379,7 @@ class FOCUS_DETRTransformer(nn.Module):
         N_, S_, C_ = memory.shape
         proposals = []
         _cur = 0
+
         for lvl, (H_, W_) in enumerate(spatial_shapes):
             # level of encoded feature scale
             mask_flatten_ = memory_padding_mask[:, _cur:(_cur + H_ * W_)].view(N_, H_, W_, 1)
@@ -382,6 +395,7 @@ class FOCUS_DETRTransformer(nn.Module):
             proposal = torch.cat((grid, wh), -1).view(N_, -1, 4)
             proposals.append(proposal)
             _cur += (H_ * W_)
+
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
         output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse of sigmoid
@@ -390,7 +404,7 @@ class FOCUS_DETRTransformer(nn.Module):
 
         output_memory = memory
 
-        # 这个地方稍微有点不一样,这是给encoder之前调用时准备的
+        # 这个地方不一样,这是给encoder之前调用时准备的
         if process_output:
             output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
             output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
@@ -485,22 +499,25 @@ class FOCUS_DETRTransformer(nn.Module):
             (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
         )
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in multi_level_masks], 1)
-        reference_points = self.get_reference_points(
-            spatial_shapes, valid_ratios, device=feat.device
-        )
+
+        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=feat.device)
         # 以上与DINO相同的
 
         # 这里是新增的
         if self.focus_rho:
+            # valid_token_nums 各个image 有效的token的数量
+            # 用backbone的token筛选一次
             backbone_output_memory, backbone_output_proposals, valid_token_nums = self.gen_encoder_output_proposals(
-                feat_flatten + lvl_pos_embed_flatten, mask_flatten, spatial_shapes,
+                feat_flatten + lvl_pos_embed_flatten,
+                mask_flatten,
+                spatial_shapes,
                 process_output=bool(self.focus_rho))
 
             # 有效的token数量
             self.valid_token_nums = valid_token_nums
             # 有效token数量 * 比例
             focus_token_nums = (valid_token_nums * self.focus_rho).int() + 1
-            # 前景token数量
+            # 前景token数量，选择这个batch中最大的一个数量
             foreground_topk = int(max(focus_token_nums))
             self.focus_token_nums = focus_token_nums
             # 每个encoder使用的token的数量
@@ -512,12 +529,13 @@ class FOCUS_DETRTransformer(nn.Module):
             # 实际是从高层级特征向下进行计算的 top down score modulation
             for i in range(self.num_feature_levels):
                 if i == 0:
-                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels - 1]:,
-                                   :]  # 这里取出的是最高层的特征层的token
+                    # 这里取出的是最高层的特征层的token
+                    backbone_lvl = backbone_output_memory[:, level_start_index[self.num_feature_levels - 1]:, :]
                     # token的分数 [bs,1,h,w]
+                    # 图5中的MLP，稍微复杂一点的MLP
                     score_prediction_lvl = self.enc_mask_predictor(backbone_lvl).reshape(bs, 1, spatial_shapes[
                         self.num_feature_levels - 1][0], spatial_shapes[self.num_feature_levels - 1][1])
-                    # [bs,hw,1]
+                    # [bs,hw,1]，自带了调整
                     foreground_score.append(score_prediction_lvl.view(bs, -1, 1))
                 else:
                     backbone_lvl = backbone_output_memory[:,
@@ -535,8 +553,9 @@ class FOCUS_DETRTransformer(nn.Module):
                     # 使用高层级的分数调制backbone的token
                     # 图5，上一个level的分数经过上采样后，乘上一个因子，然后与当前的token相乘，最后加上当前层的token
                     # [bs,hw,256]
-                    backbone_lvl = backbone_lvl + (re_backbone_lvl * up_score * self.alpha[i - 1]).permute(0, 2, 3,
-                                                                                                           1).reshape(
+                    backbone_lvl = backbone_lvl + (re_backbone_lvl *
+                                                   up_score *
+                                                   self.alpha[i - 1]).permute(0, 2, 3, 1).reshape(
                         bs, -1, self.embed_dim)
 
                     # 然后经过FTS得到分数
@@ -545,6 +564,7 @@ class FOCUS_DETRTransformer(nn.Module):
 
                     foreground_score.append(score_prediction_lvl)
 
+            # 存储的是前景分数
             # 到这里 foreground_score里的内容类似为 第一个[1,hw,1] 后面的为[1,1,h,w] 这就是上面处理的差异，因此这里需要将后面的几个hw推平
             # [bs,sum(hw),1]
             backbone_mask_prediction = torch.cat(
@@ -560,7 +580,9 @@ class FOCUS_DETRTransformer(nn.Module):
                                                                             backbone_mask_prediction.min())
 
             # 前景token的id
+            # 选择出前景token
             foreground_inds = []
+
             # todo cascade 对应6层encoder
             # cascade_set 是越来越小的,因此foreground_inds中的内容是越来越少的
             for i in range(len(self.cascade_set)):
@@ -572,8 +594,11 @@ class FOCUS_DETRTransformer(nn.Module):
         memory = self.encoder(
             # 前三个参数是这篇论文的
             backbone_mask_prediction=backbone_mask_prediction,
+            # token数量 * 比例
             focus_token_nums=focus_token_nums,
+            # 前景token的id
             foreground_inds=foreground_inds,
+            # Deformable DETR使用的参考点位
             reference_points=reference_points,  # bs, num_token, num_level, 2
             query=feat_flatten,
             key=None,
@@ -585,7 +610,6 @@ class FOCUS_DETRTransformer(nn.Module):
             valid_ratios=valid_ratios,
             **kwargs,
         )
-
 
         # 以下内容与DINO相同
         # 这里多的返回值也没有使用，第三个返回值是在上面那个调用时被使用的
@@ -616,7 +640,9 @@ class FOCUS_DETRTransformer(nn.Module):
         target_unact = torch.gather(
             output_memory, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, output_memory.shape[-1])
         )
+
         if self.learnt_init_query:
+            # 保持内容查询为网络中的参数
             target = self.tgt_embed.weight[None].repeat(bs, 1, 1)
         else:
             target = target_unact.detach()
@@ -625,6 +651,7 @@ class FOCUS_DETRTransformer(nn.Module):
             target = torch.cat([query_embed[0], target], 1)
 
         # decoder
+        # decoder的使用没有修改，与Deformable DETR相同
         inter_states, inter_references = self.decoder(
             query=target,  # bs, num_queries, embed_dims
             key=memory,  # bs, num_tokens, embed_dims
@@ -653,6 +680,7 @@ class FOCUS_DETRTransformer(nn.Module):
 
 
 # 这个是FTS模块
+# 最后输出维度为1，表示前景分数
 class MaskPredictor(nn.Module):
     def __init__(self, in_dim, h_dim):
         super().__init__()
@@ -671,7 +699,6 @@ class MaskPredictor(nn.Module):
         )
 
     def forward(self, x):
-
         z = self.layer1(x)
 
         z_local, z_global = torch.split(z, self.h_dim // 2, dim=-1)
