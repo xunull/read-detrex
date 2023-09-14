@@ -47,6 +47,7 @@ class AnchorDETRTransformer(nn.Module):
             dim_feedforward=1024,
             dropout=0.,
             activation="relu",
+            # 用的DC5
             num_feature_levels=1,
             num_query_position=300,
             num_query_pattern=3,
@@ -73,6 +74,7 @@ class AnchorDETRTransformer(nn.Module):
             self.num_encoder_layers_level = 0
         else:
             self.num_encoder_layers_level = num_encoder_layers // 2
+
         self.num_encoder_layers_spatial = num_encoder_layers - self.num_encoder_layers_level
 
         self.encoder_layers = _get_clones(encoder_layer, self.num_encoder_layers_spatial)
@@ -83,10 +85,12 @@ class AnchorDETRTransformer(nn.Module):
 
         if num_feature_levels > 1:
             # 标识特征层使用的
+            # 这份源码并没有使用
             self.level_embed = nn.Embedding(num_feature_levels, embed_dim)
 
         self.num_pattern = num_query_pattern
-        [3, 256]
+        # [3, 256]
+        # 一个单独的Embedding
         self.pattern = nn.Embedding(self.num_pattern, embed_dim)
 
         self.num_position = num_query_position
@@ -94,12 +98,13 @@ class AnchorDETRTransformer(nn.Module):
             # 空间先验如果是可学习的形式，那么其是网络中一个可学习的2维嵌入 [300,2]
             self.position = nn.Embedding(self.num_position, 2)
 
+        # 如果使用标准的attention，那么会使用这个pos2d
         self.adapt_pos2d = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
             nn.Linear(embed_dim, embed_dim),
         )
-
+        # 如果使用RCDA，那么会使用这个pos1d
         self.adapt_pos1d = nn.Sequential(
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
@@ -138,8 +143,10 @@ class AnchorDETRTransformer(nn.Module):
 
         if self.spatial_prior == "learned":
             # [bs,3*300,2]
+            # 使用Embedding
             reference_points = self.position.weight.unsqueeze(0).repeat(bs, self.num_pattern, 1)
         elif self.spatial_prior == "grid":
+            # 网格点
             nx = ny = round(math.sqrt(self.num_position))
             self.num_position = nx * ny
             x = (torch.arange(nx) + 0.5) / nx
@@ -169,6 +176,7 @@ class AnchorDETRTransformer(nn.Module):
 
         outputs = srcs.reshape(bs * l, c, h, w)
 
+        # 调用encoder
         for idx in range(len(self.encoder_layers)):
             outputs = self.encoder_layers[idx](outputs, mask, posemb_row, posemb_col, posemb_2d)
 
@@ -181,7 +189,7 @@ class AnchorDETRTransformer(nn.Module):
         # 6层decoder在这里循环了
         for lid, layer in enumerate(self.decoder_layers):
             output = layer(output,
-
+                           # 参考点
                            reference_points,
                            srcs, mask,
 
@@ -203,6 +211,7 @@ class AnchorDETRTransformer(nn.Module):
                 # 只修正中心坐标
                 tmp[..., :2] += reference
             # 修正后的坐标仅用作最后decoder的输出，并不会在decoder层内使用
+            # dab的方式会在decoder层内使用
             outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class[None,])
             outputs_coords.append(outputs_coord[None,])
@@ -323,6 +332,7 @@ class TransformerDecoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(embed_dim)
 
         # self attention
+        # self actention 依然是正常的attention
         self.self_attn = nn.MultiheadAttention(embed_dim, n_heads, dropout=dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.norm2 = nn.LayerNorm(embed_dim)
@@ -340,7 +350,7 @@ class TransformerDecoderLayer(nn.Module):
 
     def forward(
             self,
-            # 在第一个decoder中是pattern embedding
+            # 在第一个decoder中是pattern embedding，然后repeat 300
             tgt,
             # 参考点位，是一个embedding 或者固定点位
             reference_points,
@@ -353,7 +363,7 @@ class TransformerDecoderLayer(nn.Module):
             posemb_2d=None
     ):
         tgt_len = tgt.shape[1]
-
+        # pos2posemb2d 转换成高频位置编码
         query_pos = adapt_pos2d(pos2posemb2d(reference_points))
         # self attention
         q = k = self.with_pos_embed(tgt, query_pos)

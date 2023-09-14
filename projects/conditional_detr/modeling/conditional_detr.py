@@ -163,12 +163,17 @@ class ConditionalDETR(nn.Module):
         features = self.backbone(images.tensor)[self.in_features[-1]]
         features = self.input_proj(features)
         img_masks = F.interpolate(img_masks[None], size=features.shape[-2:]).to(torch.bool)[0]
+        # 空间位置编码
         pos_embed = self.position_embedding(img_masks)
 
         # hidden_states: transformer output hidden feature
         # reference: reference points in format (x, y)  with normalized coordinates in range of [0, 1].
         hidden_states, reference = self.transformer(
-            features, img_masks, self.query_embed.weight, pos_embed
+            features, img_masks,
+            # 目标查询embedding
+            self.query_embed.weight,
+            # 空间位置编码
+            pos_embed
         )
 
         reference_before_sigmoid = inverse_sigmoid(reference)

@@ -325,8 +325,10 @@ class ConditionalCrossAttention(nn.Module):
     ):
         super(ConditionalCrossAttention, self).__init__()
         self.query_content_proj = nn.Linear(embed_dim, embed_dim)
+
         self.query_pos_proj = nn.Linear(embed_dim, embed_dim)
         self.query_pos_sine_proj = nn.Linear(embed_dim, embed_dim)
+
         self.key_content_proj = nn.Linear(embed_dim, embed_dim)
         self.key_pos_proj = nn.Linear(embed_dim, embed_dim)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
@@ -427,7 +429,8 @@ class ConditionalCrossAttention(nn.Module):
 
         if is_first_layer:
             query_pos = self.query_pos_proj(query_pos)
-            # 第一层相加这个，并且在第一层也有cat的空间信息，在这里的这个还有必要么
+            # 第一层相加这个，并且在第一层也有cat的空间信息
+            # 在这里相加，应该是考虑进入第一个decoder的query_content是zero tensor
             q = query_content + query_pos
             k = key_content + key_pos
         else:
@@ -444,12 +447,13 @@ class ConditionalCrossAttention(nn.Module):
             N, B, self.num_heads, C // self.num_heads
         )
         # conditional detr在进入交叉注意模块前，query使用的是cat
-        # 连接空间信息
+        # 连接空间信息，相加改为了cat
         q = torch.cat([q, query_sine_embed], dim=3).view(N, B, C * 2)
 
         k = k.view(HW, B, self.num_heads, C // self.num_heads)  # N, 16, 256
         key_pos = key_pos.view(HW, B, self.num_heads, C // self.num_heads)
-        # 连接空间信息
+
+        # 连接空间信息, 相加改为了cat
         k = torch.cat([k, key_pos], dim=3).view(HW, B, C * 2)
 
         # attention calculation

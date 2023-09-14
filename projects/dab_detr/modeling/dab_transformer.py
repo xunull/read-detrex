@@ -149,11 +149,13 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
         )
         self.return_intermediate = return_intermediate
         self.embed_dim = self.layers[0].embed_dim
+        # conditional detr的FFN T
         self.query_scale = MLP(self.embed_dim, self.embed_dim, self.embed_dim, 2)
         self.ref_point_head = MLP(2 * self.embed_dim, self.embed_dim, self.embed_dim, 2)
 
         self.bbox_embed = None
 
+        # 高宽调制
         if modulate_hw_attn:
             self.ref_anchor_head = MLP(self.embed_dim, self.embed_dim, 2, 2)
         self.modulate_hw_attn = modulate_hw_attn
@@ -201,6 +203,7 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
                 position_transform = self.query_scale(query)
 
             # apply position transform
+            # conditional 选择，条件选择
             query_sine_embed = query_sine_embed[..., : self.embed_dim] * position_transform
 
             if self.modulate_hw_attn:
@@ -230,6 +233,7 @@ class DabDetrTransformerDecoder(TransformerLayerSequence):
             )
 
             # update anchor boxes after each decoder layer using shared box head.
+            # 在主模型被赋值的
             if self.bbox_embed is not None:
                 # predict offsets and added to the input normalized anchor boxes.
                 # 将decoder的输出经过坐标头，得到坐标偏移量修正
@@ -280,6 +284,7 @@ class DabDetrTransformer(nn.Module):
         # using patterns designed as AnchorDETR
         assert isinstance(num_patterns, int), "num_patterns should be int but got {}".format(type(num_patterns))
         self.num_patterns = num_patterns
+        # 如果使用anchor detr的pattern的方式
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, self.embed_dim)
 
@@ -294,6 +299,7 @@ class DabDetrTransformer(nn.Module):
         bs, c, h, w = x.shape
         x = x.view(bs, c, -1).permute(2, 0, 1)  # (c, bs, num_queries)
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
+        # query的空间信息 4维 xywh
         anchor_box_embed = anchor_box_embed.unsqueeze(1).repeat(1, bs, 1)
         mask = mask.view(bs, -1)
         memory = self.encoder(
@@ -306,16 +312,20 @@ class DabDetrTransformer(nn.Module):
         num_queries = anchor_box_embed.shape[0]
 
         if self.num_patterns == 0:
+            # 如果不使用pattern，那么内容查询还是zero tensor
             target = torch.zeros(num_queries, bs, self.embed_dim, device=anchor_box_embed.device)
         else:
             target = self.patterns.weight[:, None, None, :].repeat(1, num_queries, bs, 1).flatten(0, 1)
+            # 保证两者数量相同
             anchor_box_embed = anchor_box_embed.repeat(self.num_patterns, 1, 1)
 
         hidden_state, reference_boxes = self.decoder(
             query=target,
             key=memory,
             value=memory,
+            # 空间位置编码
             key_pos=pos_embed,
+            # query的空间信息
             anchor_box_embed=anchor_box_embed,
         )
 

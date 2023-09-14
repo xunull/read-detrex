@@ -182,7 +182,11 @@ class DABDETR(nn.Module):
         # reference_boxes: the refined dynamic anchor boxes in format (x, y, w, h)
         # with normalized coordinates in range of [0, 1].
         hidden_states, reference_boxes = self.transformer(
-            features, img_masks, dynamic_anchor_boxes, pos_embed
+            features, img_masks,
+            # 参考点位
+            dynamic_anchor_boxes,
+            # 空间位置编码
+            pos_embed
         )
 
         # Calculate output coordinates and classes.

@@ -135,6 +135,8 @@ class AnchorDETR(nn.Module):
         features = features.unsqueeze(1)
         img_masks = F.interpolate(img_masks[None], size=features.shape[-2:]).to(torch.bool)[0]
 
+
+        # 相关的Embedding 放在了Transformer中
         outputs_class, outputs_coord = self.transformer(features, img_masks)
 
         output = {"pred_logits": outputs_class[-1], "pred_boxes": outputs_coord[-1]}

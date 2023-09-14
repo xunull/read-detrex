@@ -115,12 +115,14 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
         super(ConditionalDetrTransformerDecoder, self).__init__(
             transformer_layers=BaseTransformerLayer(
                 attn=[
+                    # ConditionalSelfAttention
                     ConditionalSelfAttention(
                         embed_dim=embed_dim,
                         num_heads=num_heads,
                         attn_drop=attn_dropout,
                         batch_first=batch_first,
                     ),
+                    # ConditionalCrossAttention
                     ConditionalCrossAttention(
                         embed_dim=embed_dim,
                         num_heads=num_heads,
@@ -146,7 +148,7 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
         # 图3中的FFN T
         # 两层Linear，输出维度不变
         self.query_scale = MLP(self.embed_dim, self.embed_dim, self.embed_dim, 2)
-        # 两层Linear，最后输出2维
+        # 两层Linear，最后输出2维，2维表示参考点位
         self.ref_point_head = MLP(self.embed_dim, self.embed_dim, 2, 2)
 
         self.bbox_embed = None
@@ -175,23 +177,28 @@ class ConditionalDetrTransformerDecoder(TransformerLayerSequence):
             **kwargs,
     ):
         intermediate = []
-        # 根据目标查询得到参考点位
-        reference_points_before_sigmoid = self.ref_point_head(query_pos)  # [num_queries, batch_size, 2]
+        # 根据目标查询的位置查询得到参考点位
+        # 图3中的右侧黄色框
+        # [num_queries, batch_size, 2]
+        reference_points_before_sigmoid = self.ref_point_head(query_pos)
         # 限制在0-1, 图3中的紫色框内的sigmoid
         reference_points: torch.Tensor = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
 
         for idx, layer in enumerate(self.layers):
-            # xy坐标
+            # 2d坐标的含义
             obj_center = reference_points[..., :2].transpose(0, 1)  # [num_queries, batch_size, 2]
 
             # do not apply transform in position in the first decoder layer
             if idx == 0:
+                # 因为第一层，query的内容查询，还是zero，还没有更新到图像中的信息
                 position_transform = 1
             else:
+                # 图3右侧的FFN T操作
                 position_transform = self.query_scale(query)
 
             # get sine embedding for the query vector
             # 图3中紫色框的 pos embedding
+            # 将2d的坐标，编码成高频位置编码，与空间位置编码保持一致
             query_sine_embed = get_sine_pos_embed(obj_center)
 
             # apply position transform
@@ -262,6 +269,7 @@ class ConditionalDetrTransformer(nn.Module):
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
         mask = mask.view(bs, -1)
+
         memory = self.encoder(
             query=x,
             key=None,
@@ -269,7 +277,8 @@ class ConditionalDetrTransformer(nn.Module):
             query_pos=pos_embed,
             query_key_padding_mask=mask,
         )
-        # 与DETR相同，zero tensor
+
+        # 与DETR相同，zero tensor，做为内容查询
         target = torch.zeros_like(query_embed)
 
         hidden_state, references = self.decoder(
