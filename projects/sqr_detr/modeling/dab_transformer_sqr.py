@@ -160,13 +160,15 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
 
         intermediate = []
         intermediate_ref_boxes = []
+        # 参考点位也需要跟query配合取出
         reference_boxes = anchor_box_embed.sigmoid()
         # 1,2,4,7,12
         # 这两个每次decoder之后越存越多
-        query_list_reserve = [query]  # fangyi
-        reference_boxes_list_reserve = [reference_boxes]  # fangyi
+        query_list_reserve = [query]
+        reference_boxes_list_reserve = [reference_boxes]
 
         for idx, layer in enumerate(self.layers):
+            # 1, 2, 3, 5, 8, 13
             # [0,1] [0,2] [1,4] [2,7] [4,12] [7,20]
             start_q = self.start_q[idx]
             end_q = self.end_q[idx]
@@ -174,8 +176,9 @@ class DabDetrTransformerDecoder_qr(TransformerLayerSequence):
             # 1 2 3 5 8 13
             # 取出query (select recollection)
             query_list = query_list_reserve.copy()[start_q:end_q]
+            # 取出参考点位
             reference_boxes_list = reference_boxes_list_reserve.copy()[start_q:end_q]
-            #
+
             # 取出之后cat
             query = torch.cat(query_list, dim=1)
             reference_boxes = torch.cat(reference_boxes_list, dim=1)
@@ -389,7 +392,10 @@ class DabDetrTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, x, mask, anchor_box_embed, pos_embed):
+    def forward(self, x, mask,
+                anchor_box_embed,
+                # 空间位置编码
+                pos_embed):
         bs, c, h, w = x.shape
         x = x.view(bs, c, -1).permute(2, 0, 1)  # (c, bs, num_queries)
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
@@ -406,6 +412,7 @@ class DabDetrTransformer(nn.Module):
         target = torch.zeros(num_queries, bs, self.embed_dim, device=anchor_box_embed.device)
 
         hidden_state, reference_boxes = self.decoder(
+            # zero tensor
             query=target,
             key=memory,
             value=memory,
