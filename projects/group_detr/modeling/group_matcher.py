@@ -95,16 +95,20 @@ class GroupHungarianMatcher(nn.Module):
 
         # Final cost matrix
         C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-        C = C.view(bs, num_queries, -1).cpu()
+        C = C.view(bs, num_queries, -1).cpu()  # [bs,num_query*group, 17]
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = []
         # 一组有多少query
         g_num_queries = num_queries // group_nums
+        # list 数量为group
         C_list = C.split(g_num_queries, dim=1)
         for g_i in range(group_nums):
+
             C_g = C_list[g_i]
+            # 各个image的分配结果，前面是query的id，后面是gt的id
             indices_g = [linear_sum_assignment(c[i]) for i, c in enumerate(C_g.split(sizes, -1))]
+
             if g_i == 0:
                 indices = indices_g
             else:

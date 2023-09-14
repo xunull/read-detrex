@@ -184,6 +184,7 @@ class GroupDetrTransformerDecoder(TransformerLayerSequence):
             if idx == 0:
                 position_transform = 1
             else:
+                # FFN T
                 position_transform = self.query_scale(query)
 
             # get sine embedding for the query vector

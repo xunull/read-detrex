@@ -88,6 +88,7 @@ class GroupDETR(nn.Module):
 
         # define leanable object query embed and transformer module
         self.transformer = transformer
+        # 增大了embedding的数量
         self.query_embed = nn.Embedding(num_queries * group_nums, embed_dim)
         self.num_queries = num_queries
 
@@ -167,7 +168,7 @@ class GroupDETR(nn.Module):
             query_embed_weight = self.query_embed.weight
         else:
             # query_embed 创建的为（正常的数量+group的数量）
-            # 当处理时，使用正常的数量
+            # 当推理时，使用正常的数量
             query_embed_weight = self.query_embed.weight[: self.num_queries]
 
         # hidden_states: transformer output hidden feature
