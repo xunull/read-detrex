@@ -130,6 +130,7 @@ class DeformableDETR(nn.Module):
                 [copy.deepcopy(self.bbox_embed) for i in range(num_pred)]
             )
             nn.init.constant_(self.bbox_embed[0].layers[-1].bias.data[2:], -2.0)
+            # 给decoder一个，为了使用其进行坐标输出
             self.transformer.decoder.bbox_embed = self.bbox_embed
         else:
             nn.init.constant_(self.bbox_embed.layers[-1].bias.data[2:], -2.0)

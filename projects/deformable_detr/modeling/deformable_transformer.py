@@ -73,7 +73,7 @@ class DeformableDetrTransformerEncoder(TransformerLayerSequence):
             query,
             key,
             value,
-            # 虽然名字为query_pos，其实就是空间位置编码
+            # 虽然名字为query_pos，但是encocer使用的就是空间位置编码，因为下面的key_pos在方法中没有被使用
             query_pos=None,
             key_pos=None,
             attn_masks=None,
@@ -188,14 +188,17 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
                 **kwargs,
             )
 
+            # 如果在detr主模型中设置了，那么就使用其进行box refine
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[layer_idx](output)
                 if reference_points.shape[-1] == 4:
+                    # 偏移修正
                     new_reference_points = tmp + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
                 else:
                     assert reference_points.shape[-1] == 2
                     new_reference_points = tmp
+                    # 偏移修正
                     new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
                 # 每一层使用的reference_points都是修正更新后的
@@ -467,7 +470,8 @@ class DeformableDetrTransformer(nn.Module):
             topk_coords_unact = topk_coords_unact.detach()
             # decoder的参考点位来自于encoder输出topk结果 [bs,300,4]
             reference_points = topk_coords_unact.sigmoid()
-            # 作为初始的点位 [bs,300,4]
+            # 初始点位信息 作为初始的点位
+            # [bs,300,4]
             init_reference_out = reference_points
 
             # topk_coords_unact 在上面已经detach
@@ -484,6 +488,7 @@ class DeformableDetrTransformer(nn.Module):
             query = query.unsqueeze(0).expand(bs, -1, -1)
             # self.reference_points是神经网络
             reference_points = self.reference_points(query_pos).sigmoid()
+            # 初始点位信息
             init_reference_out = reference_points
 
         # decoder
@@ -506,6 +511,7 @@ class DeformableDetrTransformer(nn.Module):
         if self.as_two_stage:
             return (
                 inter_states,
+                # 初始点位信息
                 init_reference_out,
                 inter_references_out,
                 enc_outputs_class,

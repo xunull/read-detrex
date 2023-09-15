@@ -364,6 +364,7 @@ class TransformerDecoderLayer(nn.Module):
     ):
         tgt_len = tgt.shape[1]
         # pos2posemb2d 转换成高频位置编码
+        # adapt_pos2d 是MLP
         query_pos = adapt_pos2d(pos2posemb2d(reference_points))
         # self attention
         q = k = self.with_pos_embed(tgt, query_pos)
